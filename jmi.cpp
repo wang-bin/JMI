@@ -1,6 +1,7 @@
 /*
  * JMI: JNI Modern Interface
  * Copyright (C) 2016 Wang Bin - wbsecg1@gmail.com
+ * MIT License
  */
 #include "jmi.h"
 #include <cassert>
@@ -79,6 +80,26 @@ jclass getClass(const std::string& class_path, bool cache)
     c = (jclass)env->NewGlobalRef(c);
     _classes[path] = c;
     return c;
+}
+
+std::string to_string(jstring s)
+{
+    const char* cs = getEnv()->GetStringUTFChars(s, 0);
+    if (!cs)
+        return std::string();
+    std::string ss(cs);
+    getEnv()->ReleaseStringUTFChars(s, cs);
+    return ss;
+}
+
+jstring from_string(const std::string &s)
+{
+    jclass strClass = getEnv()->FindClass("java/lang/String");
+    jmethodID ctorID = getEnv()->GetMethodID(strClass, "<init>", "([B)V");
+    jbyteArray bytes = getEnv()->NewByteArray(s.size());
+    getEnv()->SetByteArrayRegion(bytes, 0, s.size(), (jbyte*)s.data());
+    jstring encoding = getEnv()->NewStringUTF("utf-8");
+    return (jstring)getEnv()->NewObject(strClass, ctorID, bytes, encoding);
 }
 
 object::object(const std::string &class_path, jclass class_id, jobject obj_id)
@@ -170,7 +191,7 @@ object& object::set_error(const std::string& err) {
 
 
 template<typename T>
-static bool fromJava(JNIEnv *env, jarray arr, T &container) {
+static bool from_j(JNIEnv *env, jarray arr, T &container) {
     if (!arr)
         return false;
     jsize n = env->GetArrayLength(arr);
@@ -182,8 +203,8 @@ static bool fromJava(JNIEnv *env, jarray arr, T &container) {
     return true;
 }
 template<typename T>
-static bool fromJava(jarray arr, T &container) {
-    return fromJava(getEnv(), arr, container);
+static bool from_j(jarray arr, T &container) {
+    return from_j(getEnv(), arr, container);
 }
 // Get an element of a java array
 template<typename T>
@@ -193,10 +214,10 @@ static bool fromJArrayElement(JNIEnv *env, jarray arr, size_t position, std::vec
     jobject elm;
     if (!fromJArrayElement(env, arr, position, elm))
         return false;
-    return fromJava(env, (jarray)elm, out);
+    return from_j(env, (jarray)elm, out);
 }
 template<typename T>
-static bool fromJavaCollection(JNIEnv *env, jobject obj, T &out) {
+static bool from_jcollection(JNIEnv *env, jobject obj, T &out) {
     if (!obj)
         return false;
     object jcontainer(obj);
@@ -207,34 +228,34 @@ static bool fromJavaCollection(JNIEnv *env, jobject obj, T &out) {
 }
 
 template<typename T>
-static bool fromJava(JNIEnv *env, jobject obj, T &out);
+static bool from_j(JNIEnv *env, jobject obj, T &out);
 template<typename T>
-static bool fromJava(JNIEnv *env, jobject obj, std::vector<T> &out) {
-    return fromJavaCollection(env, obj, out) || fromJava(env, (jarray)obj, out);
+static bool from_j(JNIEnv *env, jobject obj, std::vector<T> &out) {
+    return from_jcollection(env, obj, out) || from_j(env, (jarray)obj, out);
 }
 template<typename T>
-static bool fromJava(JNIEnv *env, jobject obj, std::set<T> &out) {
-    return fromJavaCollection(env, obj, out) || fromJava(env, (jarray)obj, out);
+static bool from_j(JNIEnv *env, jobject obj, std::set<T> &out) {
+    return from_jcollection(env, obj, out) || from_j(env, (jarray)obj, out);
 }
 template<typename T, std::size_t N>
-static bool fromJava(JNIEnv *env, jobject obj, std::array<T, N> &out) {
-    return fromJavaCollection(env, obj, out) || fromJava(env, (jarray)obj, out);
+static bool from_j(JNIEnv *env, jobject obj, std::array<T, N> &out) {
+    return from_jcollection(env, obj, out) || from_j(env, (jarray)obj, out);
 }
 
 // utility methods that return the object
 template<typename T>
-static T fromJava(JNIEnv *env, jobject obj) {
+static T from_j(JNIEnv *env, jobject obj) {
     T out;
-    bool result = fromJava(env, obj, out);
+    bool result = from_j(env, obj, out);
     assert(result);
     return out;
 }
 template<typename T>
-static T fromJava(jobject obj) {
-    return fromJava<T>(getEnv(), obj);
+static T from_j(jobject obj) {
+    return from_j<T>(getEnv(), obj);
 }
 template<>
-bool fromJava(JNIEnv *env, jobject obj, std::string &out) {
+bool from_j(JNIEnv *env, jobject obj, std::string &out) {
     if (!obj) {
         out = "";
         return true;
@@ -248,7 +269,7 @@ bool fromJava(JNIEnv *env, jobject obj, std::string &out) {
     return true;
 }
 template<>
-bool fromJava(JNIEnv *env, jobject obj, object &out) {
+bool from_j(JNIEnv *env, jobject obj, object &out) {
     out = obj;
     env->DeleteLocalRef(obj);
     return true;
@@ -296,11 +317,11 @@ int object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue 
 }
 template<>
 std::string object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
-    return fromJava<std::string>(env, call_method<jobject>(env, obj_id, methodId, args));
+    return from_j<std::string>(env, call_method<jobject>(env, obj_id, methodId, args));
 }
 template<>
 object object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
-    return fromJava<object>(env, call_method<jobject>(env, obj_id, methodId, args));
+    return from_j<object>(env, call_method<jobject>(env, obj_id, methodId, args));
 }
 
 template<>
@@ -333,96 +354,30 @@ int object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, 
 }
 template<>
 std::string object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
-    return fromJava<std::string>(env, call_static_method<jobject>(env, classId, methodId, args));
+    return from_j<std::string>(env, call_static_method<jobject>(env, classId, methodId, args));
 }
 template<>
 object object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
-    return fromJava<object>(env, call_static_method<jobject>(env, classId, methodId, args));
+    return from_j<object>(env, call_static_method<jobject>(env, classId, methodId, args));
 }
 
-template<> jvalue object::to_jvalue(const bool &obj) {
-    jvalue val;
-    val.z = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const jboolean &obj) {
-    jvalue val;
-    val.z = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const jbyte &obj) {
-    jvalue val;
-    val.b = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const char &obj) {
-    jvalue val;
-    val.b = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const jchar &obj) {
-    jvalue val;
-    val.c = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const jshort &obj) {
-    jvalue val;
-    val.s = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const jint &obj) {
-    jvalue val;
-    val.i = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const unsigned int &obj) {
-    jvalue val;
-    val.i = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const long &obj) {
-    jvalue val;
-    val.j = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const jlong &obj) {
-    jvalue val;
-    val.j = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const jfloat &obj) {
-    jvalue val;
-    val.f = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const jdouble &obj) {
-    jvalue val;
-    val.d = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const jobject &obj) {
-    jvalue val;
-    val.l = obj;
-    return val;
-}
+template<> jvalue object::to_jvalue(const bool &obj) { return jvalue{.z = obj};}
+template<> jvalue object::to_jvalue(const jboolean &obj) { return jvalue{.z = obj};}
+template<> jvalue object::to_jvalue(const jbyte &obj) { return jvalue{.b = obj};}
+template<> jvalue object::to_jvalue(const char &obj) { return jvalue{.b = (jbyte)obj};}
+template<> jvalue object::to_jvalue(const jchar &obj) { return jvalue{.c = obj};}
+template<> jvalue object::to_jvalue(const jshort &obj) { return jvalue{.s = obj};}
+template<> jvalue object::to_jvalue(const unsigned &obj) { return jvalue{.i = jint(obj)};}
+template<> jvalue object::to_jvalue(const jint &obj) { return jvalue{.i = obj};}
+template<> jvalue object::to_jvalue(const long &obj) { return jvalue{.j = obj};}
+template<> jvalue object::to_jvalue(const jlong &obj) { return jvalue{.j = obj};}
+template<> jvalue object::to_jvalue(const jfloat &obj) { return jvalue{.f = obj};}
+template<> jvalue object::to_jvalue(const jdouble &obj) { return jvalue{.d = obj};}
 template<> jvalue object::to_jvalue(const object &obj) {
     return to_jvalue(obj.instance());
 }
-template<> jvalue object::to_jvalue(const jarray &obj) {
-    jvalue val;
-    val.l = obj;
-    return val;
-}
-template<> jvalue object::to_jvalue(const jstring &obj) {
-    jvalue val;
-    val.l = obj;
-    return val;
-}
 template<> jvalue object::to_jvalue(const std::string &obj) {
-    JNIEnv *env = getEnv();
-    if (!env)
-        return jvalue();
-    return to_jvalue(env->NewStringUTF(obj.c_str()));
+    return to_jvalue(getEnv()->NewStringUTF(obj.c_str()));
 }
 
 template<>
@@ -435,6 +390,10 @@ jarray object::to_jarray(JNIEnv *env, const bool&, size_t size) {
 }
 template<>
 jarray object::to_jarray(JNIEnv *env, const char&, size_t size) {
+    return env->NewByteArray(size);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const jbyte&, size_t size) {
     return env->NewByteArray(size);
 }
 template<>
@@ -455,7 +414,7 @@ jarray object::to_jarray(JNIEnv *env, const long&, size_t size) {
 }
 template<>
 jarray object::to_jarray(JNIEnv *env, const jlong&, size_t size) {
-  return env->NewLongArray(size);
+    return env->NewLongArray(size);
 }
 template<>
 jarray object::to_jarray(JNIEnv *env, const float&, size_t size) {
@@ -562,6 +521,10 @@ template<> void object::from_jvalue(const jvalue& v, std::string& t)
 template<> void object::from_jarray(const jvalue& v, jboolean* t, std::size_t N)
 {
     getEnv()->GetBooleanArrayRegion(static_cast<jbooleanArray>(v.l), 0, N, t);
+}
+template<> void object::from_jarray(const jvalue& v, char* t, std::size_t N)
+{
+    getEnv()->GetByteArrayRegion(static_cast<jbyteArray>(v.l), 0, N, (jbyte*)t);
 }
 template<> void object::from_jarray(const jvalue& v, jbyte* t, std::size_t N)
 {

@@ -1,6 +1,7 @@
 /*
  * JMI: JNI Modern Interface
  * Copyright (C) 2016 Wang Bin - wbsecg1@gmail.com
+ * MIT License
  */
 #pragma once
 
@@ -17,6 +18,8 @@ namespace jmi {
 JavaVM* javaVM(JavaVM *vm = nullptr);
 JNIEnv *getEnv();
 jclass getClass(const std::string& class_path, bool cache = true);
+std::string to_string(jstring s);
+jstring from_string(const std::string& s);
 
 template<typename T> struct signature;
 template<> struct signature<bool> { static const char value = 'Z';};
@@ -252,7 +255,14 @@ private:
     template<typename T> static jvalue to_jvalue(const std::set<T> &obj) { return to_jvalue(to_jarray(obj));}
     template<typename T, std::size_t N> static jvalue to_jvalue(const std::array<T, N> &obj) { return to_jvalue(to_jarray(obj)); }
     template<typename C> static jvalue to_jvalue(const std::reference_wrapper<C>& c) { return to_jvalue(to_jarray(c.get(), true)); }
-
+#if 0
+    // can not defined as template specialization because to_jvalue(T*) will be choosed
+    // FIXME: why clang crashes but gcc is fine? why to_jvalue(const jlong&) works?
+    // what if use jmi::object instead of jarray?
+    static jvalue to_jvalue(const jobject &obj) { return jvalue{.l = obj};}
+    static jvalue to_jvalue(const jarray &obj) { return jvalue{.l = obj};}
+    static jvalue to_jvalue(const jstring &obj) { return jvalue{.l = obj};}
+#endif
     template<typename T>
     static jarray to_jarray(JNIEnv *env, const T &element, size_t size); // element is for getting jobject class
     // c++ container to jarray
@@ -267,6 +277,7 @@ private:
             arr = to_jarray(env, *c.begin(), c.size()); // c.begin() is for getting jobject class
         if (!is_ref) {
             size_t i = 0;
+            // TODO: set once for array, vector etc
             for (typename C::const_iterator itr = c.begin(); itr != c.end(); ++itr)
                 set_jarray(env, arr, i++, *itr);
         }
@@ -287,7 +298,7 @@ private:
     static void from_jarray(const jvalue& v, T* t, std::size_t N);
 
     template<typename T>
-    static inline void set_ref_from_jvalue(jvalue *jargs, T) {}
+    static inline void set_ref_from_jvalue(jvalue*, T) {}
     template<typename T>
     static inline void set_ref_from_jvalue(jvalue *jargs, std::reference_wrapper<T> ref) {
         from_jvalue(*jargs, ref.get());
