@@ -3,10 +3,12 @@
  * Copyright (C) 2016 Wang Bin - wbsecg1@gmail.com
  */
 #include "jmi.h"
+#include <cassert>
 #include <algorithm>
 #include <pthread.h>
 #include <iostream>
 #include <unordered_map>
+#include <android/log.h>
 
 using namespace std;
 namespace jmi {
@@ -35,6 +37,7 @@ JNIEnv *getEnv() {
     static pthread_key_t key_ = 0; // static var can be captured in lambda
     static pthread_once_t key_once_ = PTHREAD_ONCE_INIT;
     pthread_once(&key_once_, []{
+        __android_log_print(ANDROID_LOG_INFO, "JMI", "JNI Modern Interface");
         pthread_key_create(&key_, [](void*){
             JNIEnv* env = nullptr;
             if (javaVM()->GetEnv((void**)&env, JNI_VERSION_1_4) == JNI_EDETACHED)
@@ -78,14 +81,14 @@ jclass getClass(const std::string& class_path, bool cache)
     return c;
 }
 
-object::object(const std::string &class_path, jobject obj_id, jclass class_id)
+object::object(const std::string &class_path, jclass class_id, jobject obj_id)
     : instance_(nullptr), class_(nullptr) {
     init(obj_id, class_id, class_path);
 }
+object::object(jclass class_id, jobject obj_id) : object(std::string(), class_id, obj_id) {}
+object::object(jobject obj_id) : object(std::string(), nullptr, obj_id) {}
 
-object::object(jobject obj_id, jclass class_id) : object(std::string(), obj_id, class_id) {}
-
-object::object(const object &other) : object(other.class_path_, other.instance_, other.class_) {}
+object::object(const object &other) : object(other.class_path_, other.class_, other.instance_) {}
 object::object(object &&other) // can not use default implemention
 {
     std::swap(class_path_, other.class_path_);
@@ -137,8 +140,8 @@ void object::init(jobject obj_id, jclass class_id, const std::string &class_path
     }
     if (obj_id)
         instance_ = env->NewGlobalRef(obj_id);
-    if (class_path_.empty() && instance_ && class_)
-        class_path_ = object("java/lang/Class", class_).call<std::string>("getName");
+    if (class_path_.empty() && instance_ && class_) // TODO: call a static method and instance_ is not required?
+        class_path_ = object("java/lang/Class", class_).call_static<std::string>("getName");
     if (class_)
         return;
     std::string err("Could not find class");
@@ -187,20 +190,20 @@ template<typename T>
 static bool fromJArrayElement(JNIEnv *env, jarray arr, size_t position, T &out);
 template<typename T>
 static bool fromJArrayElement(JNIEnv *env, jarray arr, size_t position, std::vector<T> &out) {
-  jobject elm;
-  if (!fromJArrayElement(env, arr, position, elm))
-      return false;
-  return fromJava(env, (jarray)elm, out);
+    jobject elm;
+    if (!fromJArrayElement(env, arr, position, elm))
+        return false;
+    return fromJava(env, (jarray)elm, out);
 }
 template<typename T>
 static bool fromJavaCollection(JNIEnv *env, jobject obj, T &out) {
-  if (!obj)
-      return false;
-  object jcontainer(obj);
-  if (!jcontainer.instance_of("java.util.Collection"))
-      return false;
-  out = jcontainer.call<T>("toArray", out, out);
-  return true;
+    if (!obj)
+        return false;
+    object jcontainer(obj);
+    if (!jcontainer.instance_of("java.util.Collection"))
+        return false;
+    out = jcontainer.call<T>("toArray", out, out);
+    return true;
 }
 
 template<typename T>
@@ -252,44 +255,89 @@ bool fromJava(JNIEnv *env, jobject obj, object &out) {
 }
 
 template<>
-void object::callMethod(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+void object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
     env->CallVoidMethodA(obj_id, methodId, args);
 }
 template<>
-jboolean object::callMethod(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+jboolean object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
     return env->CallBooleanMethodA(obj_id, methodId, args);
 }
 template<>
-jobject object::callMethod(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+jbyte object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+    return env->CallByteMethodA(obj_id, methodId, args);
+}
+template<>
+jchar object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+    return env->CallCharMethodA(obj_id, methodId, args);
+}
+template<>
+jobject object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
     return env->CallObjectMethodA(obj_id, methodId, args);
 }
 template<>
-double object::callMethod(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
-  return env->CallDoubleMethodA(obj_id, methodId, args);
+double object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+    return env->CallDoubleMethodA(obj_id, methodId, args);
 }
 template<>
-long object::callMethod(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+long object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
     return env->CallLongMethodA(obj_id, methodId, args);
 }
 template<>
-jlong object::callMethod(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+jlong object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
     return env->CallLongMethodA(obj_id, methodId, args);
 }
 template<>
-float object::callMethod(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+float object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
     return env->CallFloatMethodA(obj_id, methodId, args);
 }
 template<>
-int object::callMethod(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+int object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
     return env->CallIntMethodA(obj_id, methodId, args);
 }
 template<>
-std::string object::callMethod(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
-    return fromJava<std::string>(env, callMethod<jobject>(env, obj_id, methodId, args));
+std::string object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+    return fromJava<std::string>(env, call_method<jobject>(env, obj_id, methodId, args));
 }
 template<>
-object object::callMethod(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
-    return fromJava<object>(env, callMethod<jobject>(env, obj_id, methodId, args));
+object object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+    return fromJava<object>(env, call_method<jobject>(env, obj_id, methodId, args));
+}
+
+template<>
+void object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+    env->CallStaticVoidMethodA(classId, methodId, args);
+}
+template<>
+jobject object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+    return env->CallStaticObjectMethodA(classId, methodId, args);
+}
+template<>
+double object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+    return env->CallStaticDoubleMethodA(classId, methodId, args);
+}
+template<>
+long object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+    return env->CallStaticLongMethodA(classId, methodId, args);
+}
+template<>
+jlong object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+    return env->CallStaticLongMethodA(classId, methodId, args);
+}
+template<>
+float object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+    return env->CallStaticFloatMethodA(classId, methodId, args);
+}
+template<>
+int object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+    return env->CallStaticIntMethodA(classId, methodId, args);
+}
+template<>
+std::string object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+    return fromJava<std::string>(env, call_static_method<jobject>(env, classId, methodId, args));
+}
+template<>
+object object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+    return fromJava<object>(env, call_static_method<jobject>(env, classId, methodId, args));
 }
 
 template<> jvalue object::to_jvalue(const bool &obj) {
@@ -303,6 +351,11 @@ template<> jvalue object::to_jvalue(const jboolean &obj) {
     return val;
 }
 template<> jvalue object::to_jvalue(const jbyte &obj) {
+    jvalue val;
+    val.b = obj;
+    return val;
+}
+template<> jvalue object::to_jvalue(const char &obj) {
     jvalue val;
     val.b = obj;
     return val;
@@ -371,4 +424,172 @@ template<> jvalue object::to_jvalue(const std::string &obj) {
         return jvalue();
     return to_jvalue(env->NewStringUTF(obj.c_str()));
 }
+
+template<>
+jarray object::to_jarray(JNIEnv *env, const jobject &element, size_t size) {
+    return env->NewObjectArray(size, env->GetObjectClass(element), 0);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const bool&, size_t size) {
+    return env->NewBooleanArray(size);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const char&, size_t size) {
+    return env->NewByteArray(size);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const jchar&, size_t size) {
+    return env->NewCharArray(size);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const jshort&, size_t size) {
+    return env->NewShortArray(size);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const jint&, size_t size) {
+    return env->NewIntArray(size);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const long&, size_t size) {
+    return env->NewLongArray(size);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const jlong&, size_t size) {
+  return env->NewLongArray(size);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const float&, size_t size) {
+    return env->NewFloatArray(size);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const double&, size_t size) {
+    return env->NewDoubleArray(size);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const std::string&, size_t size) {
+    return env->NewObjectArray(size, env->FindClass("java/lang/String"), 0);
+}
+template<>
+jarray object::to_jarray(JNIEnv *env, const object &element, size_t size) {
+    return env->NewObjectArray(size, element.get_class(), 0);
+}
+
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jobject &elm) {
+    env->SetObjectArrayElement((jobjectArray)arr, position, elm);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const bool &elm) {
+    const jboolean be(elm);
+    env->SetBooleanArrayRegion((jbooleanArray)arr, position, 1, &be);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jboolean &elm) {
+    const jboolean be(elm);
+    env->SetBooleanArrayRegion((jbooleanArray)arr, position, 1, &be);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jbyte &elm) {
+    env->SetByteArrayRegion((jbyteArray)arr, position, 1, &elm);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const char &elm) {
+    const jbyte be(elm);
+    env->SetByteArrayRegion((jbyteArray)arr, position, 1, &be);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jchar &elm) {
+    env->SetCharArrayRegion((jcharArray)arr, position, 1, &elm);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jshort &elm) {
+    env->SetShortArrayRegion((jshortArray)arr, position, 1, &elm);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jint &elm) {
+    env->SetIntArrayRegion((jintArray)arr, position, 1, &elm);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const long &elm) {
+    jlong jelm = elm;
+    env->SetLongArrayRegion((jlongArray)arr, position, 1, &jelm);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jlong &elm) {
+    env->SetLongArrayRegion((jlongArray)arr, position, 1, &elm);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jfloat &elm) {
+    env->SetFloatArrayRegion((jfloatArray)arr, position, 1, &elm);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jdouble &elm) {
+    env->SetDoubleArrayRegion((jdoubleArray)arr, position, 1, &elm);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const std::string &elm) {
+    jobject obj = env->NewStringUTF(elm.c_str());
+    set_jarray(env, arr, position, obj);
+}
+template<>
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const object &elm) {
+    set_jarray(env, arr, position, elm.instance());
+}
+
+template<> void object::from_jvalue(const jvalue& v, bool& t) { t = v.z;}
+template<> void object::from_jvalue(const jvalue& v, char& t) { t = v.b;}
+template<> void object::from_jvalue(const jvalue& v, uint8_t& t) { t = v.b;}
+template<> void object::from_jvalue(const jvalue& v, int8_t& t) { t = v.b;}
+template<> void object::from_jvalue(const jvalue& v, uint16_t& t) { t = v.c;} //jchar is 16bit, uint16_t or unsigned short. use wchar_t?
+template<> void object::from_jvalue(const jvalue& v, int16_t& t) { t = v.s;}
+template<> void object::from_jvalue(const jvalue& v, uint32_t& t) { t = v.i;}
+template<> void object::from_jvalue(const jvalue& v, int32_t& t) { t = v.i;}
+template<> void object::from_jvalue(const jvalue& v, uint64_t& t) { t = v.j;}
+template<> void object::from_jvalue(const jvalue& v, jlong& t) { t = v.j;}
+template<> void object::from_jvalue(const jvalue& v, long& t) { t = v.j;}
+template<> void object::from_jvalue(const jvalue& v, float& t) { t = v.f;}
+template<> void object::from_jvalue(const jvalue& v, double& t) { t = v.d;}
+template<> void object::from_jvalue(const jvalue& v, std::string& t)
+{
+    const jstring s = static_cast<jstring>(v.l);
+    const char* cs = getEnv()->GetStringUTFChars(s, 0);
+    if (!cs)
+        return;
+    t = cs;
+    getEnv()->ReleaseStringUTFChars(s, cs);
+}
+
+template<> void object::from_jarray(const jvalue& v, jboolean* t, std::size_t N)
+{
+    getEnv()->GetBooleanArrayRegion(static_cast<jbooleanArray>(v.l), 0, N, t);
+}
+template<> void object::from_jarray(const jvalue& v, jbyte* t, std::size_t N)
+{
+    getEnv()->GetByteArrayRegion(static_cast<jbyteArray>(v.l), 0, N, t);
+}
+template<> void object::from_jarray(const jvalue& v, jchar* t, std::size_t N)
+{
+    getEnv()->GetCharArrayRegion(static_cast<jcharArray>(v.l), 0, N, t);
+}
+template<> void object::from_jarray(const jvalue& v, jshort* t, std::size_t N)
+{
+    getEnv()->GetShortArrayRegion(static_cast<jshortArray>(v.l), 0, N, t);
+}
+template<> void object::from_jarray(const jvalue& v, jint* t, std::size_t N)
+{
+    getEnv()->GetIntArrayRegion(static_cast<jintArray>(v.l), 0, N, t);
+}
+template<> void object::from_jarray(const jvalue& v, jlong* t, std::size_t N)
+{
+    getEnv()->GetLongArrayRegion(static_cast<jlongArray>(v.l), 0, N, t);
+}
+template<> void object::from_jarray(const jvalue& v, float* t, std::size_t N)
+{
+    getEnv()->GetFloatArrayRegion(static_cast<jfloatArray>(v.l), 0, N, t);
+}
+template<> void object::from_jarray(const jvalue& v, double* t, std::size_t N)
+{
+    getEnv()->GetDoubleArrayRegion(static_cast<jdoubleArray>(v.l), 0, N, t);
+}
+// TODO: std c++ types use a tmp jtype array, then assign
 } //namespace jmi
