@@ -298,10 +298,17 @@ private:
     static void from_jarray(const jvalue& v, T* t, std::size_t N);
 
     template<typename T>
-    static inline void set_ref_from_jvalue(jvalue*, T) {}
+    static inline void set_ref_from_jvalue(jvalue* jargs, T) {
+        using Tn = typename std::remove_reference<T>::type;
+        if (!std::is_fundamental<Tn>::value && !std::is_pointer<Tn>::value)
+            getEnv()->DeleteLocalRef(jargs->l);
+    }
     template<typename T>
     static inline void set_ref_from_jvalue(jvalue *jargs, std::reference_wrapper<T> ref) {
         from_jvalue(*jargs, ref.get());
+        using Tn = typename std::remove_reference<T>::type;
+        if (!std::is_fundamental<Tn>::value && !std::is_pointer<Tn>::value)
+            getEnv()->DeleteLocalRef(jargs->l);
     }
 
     template<typename Arg, typename... Args>
@@ -315,7 +322,6 @@ private:
     T call_method_set_ref(JNIEnv *env, jobject oid, jmethodID mid, jvalue *jargs, Args&&... args) {
         auto setter = call_on_exit([=]{
             ref_args_from_jvalues(jargs, args...);
-            // TODO: release jarray/objects created in jvalue?
         });
         return call_method<T>(env, oid, mid, jargs);
     }
@@ -326,7 +332,6 @@ private:
     T call_static_method_set_ref(JNIEnv *env, jclass cid, jmethodID mid, jvalue *jargs, Args&&... args) {
         auto setter = call_on_exit([=]{
             ref_args_from_jvalues(jargs, args...);
-            // TODO: release jarray/objects created in jvalue?
         });
         return call_static_method<T>(env, cid, mid, jargs);
     }

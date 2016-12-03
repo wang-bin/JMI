@@ -60,6 +60,7 @@ JNIEnv *getEnv() {
     return env;
 }
 
+// TODO: limit cache size and delete local ref of jclass
 jclass getClass(const std::string& class_path, bool cache)
 {
     std::string path(class_path);
