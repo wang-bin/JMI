@@ -28,7 +28,7 @@ Writing type signatures in JNI is boring and mistakeable. They are disappeared i
 ```
 - Call method with output parameters:
 ```
-    std::array<float, 16> mat4;
+    std::array<float, 16> mat4; //or float mat4[16];
     st.call("getTransformMatrix", std::ref(mat4)); // use std::ref() if parameter will be modified by jni method
 ```
 

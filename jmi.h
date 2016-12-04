@@ -34,10 +34,9 @@ template<> struct signature<jint> { static const char value = 'I';};
 template<> struct signature<unsigned> { static const char value = 'I';};
 template<> struct signature<jfloat> { static const char value = 'F';};
 template<> struct signature<jdouble> { static const char value = 'D';};
-//template<> struct signature<jdouble> { static const char value = 'F';}; //?
 template<> struct signature<std::string> { constexpr static const char* value = "Ljava/lang/String;";};
 
-template<typename T>
+template<typename T, typename std::enable_if<!std::is_pointer<T>::value, int>::type = 0>
 inline std::string signature_of(const T&) {
     return {signature<T>::value}; // initializer supports bot char and char*
 }
@@ -67,14 +66,20 @@ template<typename T>
 inline std::string signature_of(const std::reference_wrapper<T>&) {
     return signature_of(T()); //TODO: no construct
 }
-
-template<typename T>
-inline std::string signature_of(T*) { return {signature<jlong>::value};}
-/*
-//FIXME: conflict with overload (T*). use std::to_array(...)
 template<typename T, std::size_t N>
-inline std::string signature_of(T(&)[N]) { return std::string({'['}).append({signature_of(T())});}
-*/
+inline std::string signature_of(const std::reference_wrapper<T[N]>&) {
+    return std::string({'['}).append({signature_of(T())});
+    //T t[N];
+    //return signature_of<T,N>(t); //aggregated initialize. FIXME: why reference_wrapper ctor is called?
+    //return signature_of<T,N>((T[N]){}); //aggregated initialize. FIXME: why reference_wrapper ctor is called?
+}
+
+// T* and T(&)[N] are treated as the same. use enable_if to select 1 of them. The function parameter is (const T&), so the default implemention of signature_of(const T&) must check is_pointer too.
+template<typename T, typename std::enable_if<std::is_pointer<T>::value, int>::type = 0>
+inline std::string signature_of(const T&) { return {signature<jlong>::value};}
+template<typename T, std::size_t N>
+inline std::string signature_of(const T(&)[N]) { return std::string({'['}).append({signature_of(T())});}
+
 
 class object {
 public:
@@ -99,6 +104,7 @@ public:
     std::string signature() const { return "L" + class_path_ + ";";}
     std::string error() const {return error_;}
 
+     // TODO: return shared_ptr?
     template<typename... Args>
     static object create(const std::string &path, Args&&... args) {
         const jclass cid = jmi::getClass(path);
@@ -144,16 +150,16 @@ public:
         const jmethodID mid = env->GetMethodID(cid, name.c_str(), signature.c_str());
         if (!mid || env->ExceptionCheck())
             return T();
-        return call_method_set_ref<T>(env, oid, mid, object::ptr0(to_jvalues(args...)), args...);
+        return call_method_set_ref<T>(env, oid, mid, object::ptr0(to_jvalues(std::forward<Args>(args)...)), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
     void call(const std::string &name, Args&&... args) {
-        call_with(name, args_signature(args...).append(signature_of()), args...);
+        call_with(name, args_signature(std::forward<Args>(args)...).append(signature_of()), args...);
     }
     template<typename... Args>
     void call_with(const std::string &name, const std::string &signature, Args&&... args) {
-        return call_with<void>(name, signature, args...);
+        return call_with<void>(name, signature, std::forward<Args>(args)...);
     }
 
     template<typename T, typename... Args>
@@ -225,7 +231,7 @@ private:
 
     template<typename... Args>
     static std::string args_signature(Args&&... args) {
-        return "(" + make_sig(args...) + ")";// + signature_of();
+        return "(" + make_sig(std::forward<Args>(args)...) + ")";
     }
 
     template<typename... Args>
@@ -238,7 +244,7 @@ private:
 
     template<typename Arg, typename... Args>
     static std::string make_sig(Arg&& arg, Args&&... args) {
-        return signature_of(arg).append(make_sig(args...));
+        return signature_of(std::forward<Arg>(arg)).append(make_sig(std::forward<Args>(args)...));
     }
     static std::string make_sig() {return std::string();}
 
@@ -255,6 +261,7 @@ private:
     template<typename T> static jvalue to_jvalue(const std::set<T> &obj) { return to_jvalue(to_jarray(obj));}
     template<typename T, std::size_t N> static jvalue to_jvalue(const std::array<T, N> &obj) { return to_jvalue(to_jarray(obj)); }
     template<typename C> static jvalue to_jvalue(const std::reference_wrapper<C>& c) { return to_jvalue(to_jarray(c.get(), true)); }
+    template<typename T, std::size_t N> static jvalue to_jvalue(const std::reference_wrapper<T[N]>& c) { return to_jvalue(to_jarray<T,N>(c.get(), true)); }
 #if 0
     // can not defined as template specialization because to_jvalue(T*) will be choosed
     // FIXME: why clang crashes but gcc is fine? why to_jvalue(const jlong&) works?
@@ -265,6 +272,20 @@ private:
 #endif
     template<typename T>
     static jarray to_jarray(JNIEnv *env, const T &element, size_t size); // element is for getting jobject class
+    template<typename T, std::size_t N> static jarray to_jarray(const T(&c)[N], bool is_ref = false) {
+        static_assert(N > 0, "invalide array size");
+        JNIEnv *env = getEnv();
+        if (!env)
+            return nullptr;
+        jarray arr = nullptr;
+        arr = to_jarray(env, c[0], N);
+        if (!is_ref) {
+            // TODO: set once
+            for (std::size_t i = 0; i < N; ++i)
+                set_jarray(env, arr, i, c[i]);
+        }
+        return arr;
+    }
     // c++ container to jarray
     template<typename C> static jarray to_jarray(const C &c, bool is_ref = false) {
         JNIEnv *env = getEnv();
@@ -290,10 +311,17 @@ private:
     template<typename T> static T* ptr0(std::array<T,0>) {return nullptr;} // overload, not partial specialization (disallowed)
 
     template<typename T> static void from_jvalue(const jvalue& v, T &t);
-    template<typename T> static void from_jvalue(const jvalue& v, T *t) { from_jvalue(v, (jlong&)t); }
+    template<typename T> static void from_jvalue(const jvalue& v, T *t, std::size_t n = 0) { // T* and T(&)[N] is the same
+        if (n <= 0)
+            from_jvalue(v, (jlong&)t);
+        else
+            from_jarray(v, t, n);
+    }
     template<typename T> static void from_jvalue(const jvalue& v, std::vector<T> &t) { from_jarray(v, t.data(), t.size()); }
     //template<typename T> static void from_jvalue(const jvalue& v, const std::set<T>: &t) { return from_jvalue(v, to_jarray(t));}
     template<typename T, std::size_t N> static void from_jvalue(const jvalue& v, std::array<T, N> &t) { return from_jarray(v, t.data(), N); }
+    //template<typename T, std::size_t N> static void from_jvalue(const jvalue& v, T(&t)[N]) { return from_jarray(v, t, N); }
+
     template<typename T>
     static void from_jarray(const jvalue& v, T* t, std::size_t N);
 
@@ -309,6 +337,11 @@ private:
         using Tn = typename std::remove_reference<T>::type;
         if (!std::is_fundamental<Tn>::value && !std::is_pointer<Tn>::value)
             getEnv()->DeleteLocalRef(jargs->l);
+    }
+    template<typename T, std::size_t N>
+    static inline void set_ref_from_jvalue(jvalue *jargs, std::reference_wrapper<T[N]> ref) {
+        from_jvalue(*jargs, ref.get(), N); // assume only T* and T[N]
+        getEnv()->DeleteLocalRef(jargs->l);
     }
 
     template<typename Arg, typename... Args>
