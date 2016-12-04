@@ -280,9 +280,12 @@ private:
         jarray arr = nullptr;
         arr = to_jarray(env, c[0], N);
         if (!is_ref) {
-            // TODO: set once
-            for (std::size_t i = 0; i < N; ++i)
-                set_jarray(env, arr, i, c[i]);
+            if (std::is_fundamental<T>::value) {
+                set_jarray(env, arr, 0, N, c[0]);
+            } else {
+                for (std::size_t i = 0; i < N; ++i)
+                    set_jarray(env, arr, i, 1, c[i]);
+            }
         }
         return arr;
     }
@@ -300,13 +303,13 @@ private:
             size_t i = 0;
             // TODO: set once for array, vector etc
             for (typename C::const_iterator itr = c.begin(); itr != c.end(); ++itr)
-                set_jarray(env, arr, i++, *itr);
+                set_jarray(env, arr, i++, 1, *itr);
         }
         return arr;
     }
 
     template<typename T>
-    static void set_jarray(JNIEnv *env, jarray arr, size_t position, const T &elm);
+    static void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const T &elm);
     template<typename T, std::size_t N> static T* ptr0(std::array<T,N> a) { return &std::get<0>(a);}
     template<typename T> static T* ptr0(std::array<T,0>) {return nullptr;} // overload, not partial specialization (disallowed)
 

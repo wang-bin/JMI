@@ -435,65 +435,83 @@ jarray object::to_jarray(JNIEnv *env, const object &element, size_t size) {
 }
 
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jobject &elm) {
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jobject &elm) {
+    assert(n == 1 && "set only 1 jobject array element is allowed");
     env->SetObjectArrayElement((jobjectArray)arr, position, elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const bool &elm) {
-    const jboolean be(elm);
-    env->SetBooleanArrayRegion((jbooleanArray)arr, position, 1, &be);
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const bool &elm) {
+    if (n == 1 || sizeof(jboolean) == sizeof(bool)) {
+        env->SetBooleanArrayRegion((jbooleanArray)arr, position, n, (const jboolean*)&elm);
+    } else {
+        std::vector<jboolean> tmp(n);
+        for (size_t i = 0; i < n; ++i)
+            tmp[i] = *(&elm + i);
+        env->SetBooleanArrayRegion((jbooleanArray)arr, position, n, tmp.data());
+    }
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jboolean &elm) {
-    const jboolean be(elm);
-    env->SetBooleanArrayRegion((jbooleanArray)arr, position, 1, &be);
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jboolean &elm) {
+    env->SetBooleanArrayRegion((jbooleanArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jbyte &elm) {
-    env->SetByteArrayRegion((jbyteArray)arr, position, 1, &elm);
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jbyte &elm) {
+    env->SetByteArrayRegion((jbyteArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const char &elm) {
-    const jbyte be(elm);
-    env->SetByteArrayRegion((jbyteArray)arr, position, 1, &be);
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const char &elm) {
+    if (n == 1 || sizeof(jbyte) == sizeof(char)) {
+        env->SetByteArrayRegion((jbyteArray)arr, position, n, (const jbyte*)&elm);
+    } else {
+        std::vector<jbyte> tmp(n);
+        for (size_t i = 0; i < n; ++i)
+            tmp[i] = *(&elm + i);
+        env->SetByteArrayRegion((jbyteArray)arr, position, n, tmp.data());
+    }
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jchar &elm) {
-    env->SetCharArrayRegion((jcharArray)arr, position, 1, &elm);
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jchar &elm) {
+    env->SetCharArrayRegion((jcharArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jshort &elm) {
-    env->SetShortArrayRegion((jshortArray)arr, position, 1, &elm);
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jshort &elm) {
+    env->SetShortArrayRegion((jshortArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jint &elm) {
-    env->SetIntArrayRegion((jintArray)arr, position, 1, &elm);
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jint &elm) {
+    env->SetIntArrayRegion((jintArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const long &elm) {
-    jlong jelm = elm;
-    env->SetLongArrayRegion((jlongArray)arr, position, 1, &jelm);
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const long &elm) {
+    if (n == 1 || sizeof(jlong) == sizeof(long)) {
+        env->SetLongArrayRegion((jlongArray)arr, position, n, (const jlong*)&elm);
+    } else {
+        std::vector<jlong> tmp(n);
+        for (size_t i = 0; i < n; ++i)
+            tmp[i] = *(&elm + i);
+        env->SetLongArrayRegion((jlongArray)arr, position, n, tmp.data());
+    }
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jlong &elm) {
-    env->SetLongArrayRegion((jlongArray)arr, position, 1, &elm);
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jlong &elm) {
+    env->SetLongArrayRegion((jlongArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jfloat &elm) {
-    env->SetFloatArrayRegion((jfloatArray)arr, position, 1, &elm);
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jfloat &elm) {
+    env->SetFloatArrayRegion((jfloatArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const jdouble &elm) {
-    env->SetDoubleArrayRegion((jdoubleArray)arr, position, 1, &elm);
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jdouble &elm) {
+    env->SetDoubleArrayRegion((jdoubleArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const std::string &elm) {
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const std::string &elm) {
     jobject obj = env->NewStringUTF(elm.c_str());
-    set_jarray(env, arr, position, obj);
+    set_jarray(env, arr, position, n, obj);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, const object &elm) {
-    set_jarray(env, arr, position, elm.instance());
+void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const object &elm) {
+    set_jarray(env, arr, position, n, elm.instance());
 }
 
 template<> void object::from_jvalue(const jvalue& v, bool& t) { t = v.z;}
