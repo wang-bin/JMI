@@ -97,7 +97,7 @@ public:
      * \return true if it's an jobject instance
      */
     operator bool() const { return !!instance_;}
-    jclass get_class() const { return class_;}
+    jclass get_class() const { return class_;} // TODO: class_id
     const std::string &class_path() const { return class_path_;}
     jobject instance() const { return instance_;}
     bool instance_of(const std::string &class_path) const;
@@ -132,6 +132,7 @@ public:
     }
     template<typename T, typename... Args>
     T call_with(const std::string &name, const std::string &signature, Args&& ...args) {
+        error_.clear();
         const jclass cid = get_class();
         if (!cid)
             return T();
@@ -144,7 +145,7 @@ public:
         auto checker = call_on_exit([=]{
             if (env->ExceptionCheck()) {
                 env->ExceptionClear();
-                set_error(std::string("Failed to call method '") + name + " with signature '" + signature + "'.");
+                set_error(std::string("Failed to call method '") + name + "' with signature '" + signature + "'.");
             }
         });
         const jmethodID mid = env->GetMethodID(cid, name.c_str(), signature.c_str());
@@ -169,6 +170,7 @@ public:
 
     template<typename T, typename... Args>
     T call_static_with(const std::string &name, const std::string &signature, Args&&... args) {
+        error_.clear();
         const jclass cid = get_class();
         if (!cid)
             return T();
@@ -176,7 +178,7 @@ public:
         auto checker = call_on_exit([=]{
             if (env->ExceptionCheck()) {
                 env->ExceptionClear();
-                set_error(std::string("Failed to call static method '") + name + " with signature '" + signature + "'.");
+                set_error(std::string("Failed to call static method '") + name + "'' with signature '" + signature + "'.");
             }
         });
         const jmethodID mid = env->GetStaticMethodID(cid, name.c_str(), signature.c_str());
@@ -221,11 +223,11 @@ private:
         scope_exit_handler& operator=(const scope_exit_handler&) = delete;
     };
     template<class F>
-    inline scope_exit_handler<F> call_on_exit(const F& f) noexcept {
+    inline static scope_exit_handler<F> call_on_exit(const F& f) noexcept {
         return scope_exit_handler<F>(f);
     }
     template<class F>
-    inline scope_exit_handler<F> call_on_exit(F&& f) noexcept {
+    inline static scope_exit_handler<F> call_on_exit(F&& f) noexcept {
         return scope_exit_handler<F>(std::forward<F>(f));
     }
 
@@ -238,6 +240,7 @@ private:
     static std::array<jvalue, sizeof...(Args)> to_jvalues(Args&&... args) {
         std::array<jvalue, sizeof...(Args)> jargs;
         set_jvalues(&std::get<0>(jargs), args...);
+        //snprintf(nullptr, 0, "jargs: %p\n", &jargs[0]);fflush(0); // why this line works as magic? here or in set_jvalues()
         return jargs;
     }
     static std::array<jvalue,0> to_jvalues() { return std::array<jvalue,0>();}
