@@ -9,7 +9,10 @@
 #include <pthread.h>
 #include <iostream>
 #include <unordered_map>
+#if defined(__ANDROID__) || defined(ANDROID)
+#define OS_ANDROID
 #include <android/log.h>
+#endif
 
 using namespace std;
 namespace jmi {
@@ -38,7 +41,13 @@ JNIEnv *getEnv() {
     static pthread_key_t key_ = 0; // static var can be captured in lambda
     static pthread_once_t key_once_ = PTHREAD_ONCE_INIT;
     pthread_once(&key_once_, []{
-        __android_log_print(ANDROID_LOG_INFO, "JMI", "JNI Modern Interface");
+#ifdef OS_ANDROID
+        __android_log_print(ANDROID_LOG_INFO, "JMI",
+#else
+        printf(
+#endif
+        "JNI Modern Interface\n");
+
         pthread_key_create(&key_, [](void*){
             JNIEnv* env = nullptr;
             if (javaVM()->GetEnv((void**)&env, JNI_VERSION_1_4) == JNI_EDETACHED)
@@ -51,7 +60,11 @@ JNIEnv *getEnv() {
     env = (JNIEnv*)pthread_getspecific(key_);
     if (env)
         cerr << "TLS has a JNIEnv* but not attatched!" << endl;
-    status = javaVM()->AttachCurrentThread(&env, NULL);
+#ifdef OS_ANDROID
+    status = javaVM()->AttachCurrentThread(&env, nullptr);
+#else
+    status = javaVM()->AttachCurrentThread((void**)&env, nullptr);
+#endif
     if (status != JNI_OK) {
         cerr << "AttachCurrentThread failed: " << status << endl;
         return nullptr;
@@ -262,7 +275,7 @@ bool from_j(JNIEnv *env, jobject obj, std::string &out) {
         return true;
     }
     jstring jstr = (jstring)obj;
-    const char *chars = env->GetStringUTFChars(jstr, NULL);
+    const char *chars = env->GetStringUTFChars(jstr, nullptr);
     if (!chars)
         return false;
     out = chars;
@@ -301,10 +314,6 @@ double object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jval
     return env->CallDoubleMethodA(obj_id, methodId, args);
 }
 template<>
-long object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
-    return env->CallLongMethodA(obj_id, methodId, args);
-}
-template<>
 jlong object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
     return env->CallLongMethodA(obj_id, methodId, args);
 }
@@ -338,10 +347,6 @@ double object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodI
     return env->CallStaticDoubleMethodA(classId, methodId, args);
 }
 template<>
-long object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
-    return env->CallStaticLongMethodA(classId, methodId, args);
-}
-template<>
 jlong object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
     return env->CallStaticLongMethodA(classId, methodId, args);
 }
@@ -370,7 +375,6 @@ template<> jvalue object::to_jvalue(const jchar &obj) { return jvalue{.c = obj};
 template<> jvalue object::to_jvalue(const jshort &obj) { return jvalue{.s = obj};}
 template<> jvalue object::to_jvalue(const unsigned &obj) { return jvalue{.i = jint(obj)};}
 template<> jvalue object::to_jvalue(const jint &obj) { return jvalue{.i = obj};}
-template<> jvalue object::to_jvalue(const long &obj) { return jvalue{.j = obj};}
 template<> jvalue object::to_jvalue(const jlong &obj) { return jvalue{.j = obj};}
 template<> jvalue object::to_jvalue(const jfloat &obj) { return jvalue{.f = obj};}
 template<> jvalue object::to_jvalue(const jdouble &obj) { return jvalue{.d = obj};}
@@ -408,10 +412,6 @@ jarray object::to_jarray(JNIEnv *env, const jshort&, size_t size) {
 template<>
 jarray object::to_jarray(JNIEnv *env, const jint&, size_t size) {
     return env->NewIntArray(size);
-}
-template<>
-jarray object::to_jarray(JNIEnv *env, const long&, size_t size) {
-    return env->NewLongArray(size);
 }
 template<>
 jarray object::to_jarray(JNIEnv *env, const jlong&, size_t size) {
@@ -482,17 +482,6 @@ void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, cons
     env->SetIntArrayRegion((jintArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const long &elm) {
-    if (n == 1 || sizeof(jlong) == sizeof(long)) {
-        env->SetLongArrayRegion((jlongArray)arr, position, n, (const jlong*)&elm);
-    } else {
-        std::vector<jlong> tmp(n);
-        for (size_t i = 0; i < n; ++i)
-            tmp[i] = *(&elm + i);
-        env->SetLongArrayRegion((jlongArray)arr, position, n, tmp.data());
-    }
-}
-template<>
 void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jlong &elm) {
     env->SetLongArrayRegion((jlongArray)arr, position, n, &elm);
 }
@@ -524,7 +513,6 @@ template<> void object::from_jvalue(const jvalue& v, uint32_t& t) { t = v.i;}
 template<> void object::from_jvalue(const jvalue& v, int32_t& t) { t = v.i;}
 template<> void object::from_jvalue(const jvalue& v, uint64_t& t) { t = v.j;}
 template<> void object::from_jvalue(const jvalue& v, jlong& t) { t = v.j;}
-template<> void object::from_jvalue(const jvalue& v, long& t) { t = v.j;}
 template<> void object::from_jvalue(const jvalue& v, float& t) { t = v.f;}
 template<> void object::from_jvalue(const jvalue& v, double& t) { t = v.d;}
 template<> void object::from_jvalue(const jvalue& v, std::string& t)
