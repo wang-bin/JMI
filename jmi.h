@@ -34,12 +34,14 @@ template<> struct signature<unsigned> { static const char value = 'I';};
 template<> struct signature<jfloat> { static const char value = 'F';};
 template<> struct signature<jdouble> { static const char value = 'D';};
 template<> struct signature<std::string> { constexpr static const char* value = "Ljava/lang/String;";};
+template<> struct signature<char*> { constexpr static const char* value = "Ljava/lang/String;";};
 
 template<typename T, typename std::enable_if<!std::is_pointer<T>::value, int>::type = 0>
 inline std::string signature_of(const T&) {
     return {signature<T>::value}; // initializer supports bot char and char*
 }
-inline std::string signature_of() { return {'V'};};
+inline std::string signature_of(const char*) { return "Ljava/lang/String;";}
+inline std::string signature_of() { return {'V'};}
 // for base types, {'[', signature<T>::value};
 // TODO: stl container forward declare only
 template<typename T>
@@ -259,6 +261,7 @@ private:
 
     template<typename T> static jvalue to_jvalue(const T &obj);
     template<typename T> static jvalue to_jvalue(T *obj) { return to_jvalue((jlong)obj); }
+    static jvalue to_jvalue(const char* obj);// { return to_jvalue(std::string(obj)); }
     template<typename T> static jvalue to_jvalue(const std::vector<T> &obj) { return to_jvalue(to_jarray(obj)); }
     template<typename T> static jvalue to_jvalue(const std::set<T> &obj) { return to_jvalue(to_jarray(obj));}
     template<typename T, std::size_t N> static jvalue to_jvalue(const std::array<T, N> &obj) { return to_jvalue(to_jarray(obj)); }
@@ -335,6 +338,9 @@ private:
         using Tn = typename std::remove_reference<T>::type;
         if (!std::is_fundamental<Tn>::value && !std::is_pointer<Tn>::value)
             getEnv()->DeleteLocalRef(jargs->l);
+    }
+    static inline void set_ref_from_jvalue(jvalue *jargs, const char* s) {
+        getEnv()->DeleteLocalRef(jargs->l);
     }
     template<typename T>
     static inline void set_ref_from_jvalue(jvalue *jargs, std::reference_wrapper<T> ref) {

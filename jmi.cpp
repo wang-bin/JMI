@@ -384,6 +384,9 @@ template<> jvalue object::to_jvalue(const object &obj) {
 template<> jvalue object::to_jvalue(const std::string &obj) {
     return to_jvalue(getEnv()->NewStringUTF(obj.c_str()));
 }
+jvalue object::to_jvalue(const char* s) {
+    return to_jvalue(getEnv()->NewStringUTF(s));
+}
 
 template<>
 jarray object::to_jarray(JNIEnv *env, const jobject &element, size_t size) {
