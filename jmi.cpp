@@ -59,7 +59,7 @@ JNIEnv *getEnv() {
     });
     env = (JNIEnv*)pthread_getspecific(key_);
     if (env)
-        cerr << "TLS has a JNIEnv* but not attatched!" << endl;
+        cerr << "TLS has a JNIEnv* but not attatched. Maybe detatched by user." << endl;
 #ifdef OS_ANDROID
     status = javaVM()->AttachCurrentThread(&env, nullptr);
 #else
@@ -108,12 +108,13 @@ std::string to_string(jstring s)
 
 jstring from_string(const std::string &s)
 {
-    jclass strClass = getEnv()->FindClass("java/lang/String");
-    jmethodID ctorID = getEnv()->GetMethodID(strClass, "<init>", "([B)V");
-    jbyteArray bytes = getEnv()->NewByteArray(s.size());
-    getEnv()->SetByteArrayRegion(bytes, 0, s.size(), (jbyte*)s.data());
-    jstring encoding = getEnv()->NewStringUTF("utf-8");
-    return (jstring)getEnv()->NewObject(strClass, ctorID, bytes, encoding);
+    JNIEnv* env = getEnv();
+    jclass strClass = env->FindClass("java/lang/String");
+    jmethodID ctorID = env->GetMethodID(strClass, "<init>", "([B)V");
+    jbyteArray bytes = env->NewByteArray(s.size());
+    env->SetByteArrayRegion(bytes, 0, s.size(), (jbyte*)s.data());
+    jstring encoding = env->NewStringUTF("utf-8");
+    return (jstring)env->NewObject(strClass, ctorID, bytes, encoding);
 }
 
 object::object(const std::string &class_path, jclass class_id, jobject obj_id)
@@ -564,5 +565,4 @@ template<> void object::from_jarray(const jvalue& v, double* t, std::size_t N)
 {
     getEnv()->GetDoubleArrayRegion(static_cast<jdoubleArray>(v.l), 0, N, t);
 }
-// TODO: std c++ types use a tmp jtype array, then assign
 } //namespace jmi
