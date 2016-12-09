@@ -1,5 +1,6 @@
 #include "jmi.h"
 #include <iostream>
+#include <type_traits>
 
 using namespace std;
 
@@ -36,13 +37,4 @@ int main(int argc, char *argv[])
     cout << jmi::signature_of(mat4) << endl;
     //std::unordered_map<float, string> m;
     //cout << jmi::signature_of(m);
-
-    jmi::object st = jmi::object::create("android/graphics/SurfaceTexture", 0);
-    if (!st.error().empty())
-        cout << st.error() << endl;
-    st.callVoid("detachFromGLContext");
-
-    if (!st.error().empty())
-        cout << st.error() << endl;
-    return 0;
 }
