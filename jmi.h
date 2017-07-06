@@ -97,7 +97,7 @@ public:
     operator bool() const { return !!instance_;}
     jclass get_class() const { return class_;}
     const std::string &class_path() const { return class_path_;}
-    jobject instance() const { return instance_;}
+    jobject instance() const { return instance_;} // get(), operator jobject()
     bool instance_of(const std::string &class_path) const;
     std::string signature() const { return "L" + class_path_ + ";";}
     std::string error() const {return error_;}
@@ -113,7 +113,7 @@ public:
             return object();
         string cpath(path);
         replace(cpath.begin(), cpath.end(), '.', '/');
-        const jclass cid = (jclass)env->FindClass(path.c_str());
+        const jclass cid = (jclass)env->FindClass(cpath.c_str());
         auto checker = call_on_exit([=]{
             if (env->ExceptionCheck()) {
                 env->ExceptionDescribe();
@@ -123,15 +123,15 @@ public:
                 env->DeleteLocalRef(cid);
         });
         if (!cid)
-            return object().set_error("invalid class path: " + path);
+            return object().set_error("invalid class path: " + cpath);
         const string s(args_signature(forward<Args>(args)...).append(signature_of())); // void
         const jmethodID mid = env->GetMethodID(cid, "<init>", s.c_str());
         if (!mid)
-            return object().set_error(string("Failed to find constructor '" + path + "' with signature '" + s + "'."));
+            return object().set_error(string("Failed to find constructor '" + cpath + "' with signature '" + s + "'."));
         jobject obj = env->NewObjectA(cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args))...}).begin())); // ptr0(jv) crash
         if (!obj)
-            return object().set_error(string("Failed to call constructor '" + path + "' with signature '" + s + "'."));
-        return object(path, cid, obj);
+            return object().set_error(string("Failed to call constructor '" + cpath + "' with signature '" + s + "'."));
+        return object(cpath, cid, obj);
     }
 
     // use call_with with signature for method whose return type is object
