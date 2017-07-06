@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2017 Wang Bin - wbsecg1@gmail.com
  * MIT License
  */
 #include "jmi.h"
@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <pthread.h>
 #include <iostream>
-#include <unordered_map>
 #if defined(__ANDROID__) || defined(ANDROID)
 #define OS_ANDROID
 #include <android/log.h>
@@ -71,29 +70,6 @@ JNIEnv *getEnv() {
     }
     pthread_setspecific(key_, env);
     return env;
-}
-
-// TODO: limit cache size and delete local ref of jclass
-jclass getClass(const std::string& class_path, bool cache)
-{
-    std::string path(class_path);
-    std::replace(path.begin(), path.end(), '.', '/');
-    typedef std::unordered_map<std::string, jclass> class_map;
-    static class_map _classes;
-    class_map::const_iterator it = _classes.find(path);
-    if (it != _classes.end())
-        return it->second;
-    JNIEnv *env = getEnv();
-    jclass c = (jclass)env->FindClass(path.c_str());
-    if (!c) {
-        env->ExceptionClear();
-        return nullptr;
-    }
-    if (!cache)
-        return c;
-    c = (jclass)env->NewGlobalRef(c);
-    _classes[path] = c;
-    return c;
 }
 
 std::string to_string(jstring s)
@@ -163,18 +139,28 @@ bool object::operator==(const object &other) const {
 }
 
 void object::init(jobject obj_id, jclass class_id, const std::string &class_path) {
+    if (!obj_id && !class_id && class_path.empty())
+        return;
     JNIEnv *env = getEnv();
     class_path_ = class_path;
     std::replace(class_path_.begin(), class_path_.end(), '.', '/');
-    if (class_id) {
-        class_ = (jclass)env->NewGlobalRef(class_id);
-    } else {
+    if (!class_id) {
         if (obj_id)
-            class_ = env->GetObjectClass(obj_id);
+            class_id = env->GetObjectClass(obj_id); // TODO: clear class_path?
         else if (!class_path.empty())
-            class_ = jmi::getClass(class_path_);
-        class_path_.clear(); //?
+            class_id = (jclass)env->FindClass(class_path_.data());
     }
+    auto checker = call_on_exit([=]{
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+        }
+        if (class_id)
+            env->DeleteLocalRef(class_id);
+    });
+    if (!class_id)
+        return;
+    class_ = (jclass)env->NewGlobalRef(class_id);
     if (obj_id)
         instance_ = env->NewGlobalRef(obj_id);
     if (class_path_.empty() && instance_ && class_) // TODO: call a static method and instance_ is not required?

@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2017 Wang Bin - wbsecg1@gmail.com
  * MIT License
  */
 #pragma once
@@ -16,7 +16,6 @@ namespace jmi {
 
 JavaVM* javaVM(JavaVM *vm = nullptr);
 JNIEnv *getEnv();
-jclass getClass(const std::string& class_path, bool cache = true);
 std::string to_string(jstring s);
 jstring from_string(const std::string& s);
 
@@ -107,23 +106,31 @@ public:
      // TODO: return shared_ptr?
     template<typename... Args>
     static object create(const std::string &path, Args&&... args) {
-        const jclass cid = jmi::getClass(path);
-        if (!cid)
-            return object(path).set_error("invalid class path: " + path);
-        const std::string s(args_signature(std::forward<Args>(args)...).append(signature_of())); // void
+        if (path.empty())
+            return object();
         JNIEnv *env = getEnv();
+        if (!env)
+            return object();
+        std::string cpath(path);
+        std::replace(cpath.begin(), cpath.end(), '.', '/');
+        const jclass cid = (jclass)env->FindClass(path.c_str());
+        auto checker = call_on_exit([=]{
+            if (env->ExceptionCheck()) {
+                env->ExceptionDescribe();
+                env->ExceptionClear();
+            }
+            if (cid)
+                env->DeleteLocalRef(cid);
+        });
+        if (!cid)
+            return object().set_error("invalid class path: " + path);
+        const std::string s(args_signature(std::forward<Args>(args)...).append(signature_of())); // void
         const jmethodID mid = env->GetMethodID(cid, "<init>", s.c_str());
-        if (!mid || env->ExceptionCheck()) {
-            env->ExceptionDescribe();
-            env->ExceptionClear();
-            return object(path).set_error(std::string("Failed to find constructor '" + path + "' with signature '" + s + "'."));
-        }
+        if (!mid)
+            return object().set_error(std::string("Failed to find constructor '" + path + "' with signature '" + s + "'."));
         jobject obj = env->NewObjectA(cid, mid, ptr0(to_jvalues(std::forward<Args>(args)...))); // ptr0(jv) crash
-        if (env->ExceptionCheck()) {
-            env->ExceptionDescribe();
-            env->ExceptionClear();
-            return object(path).set_error(std::string("Failed to call constructor '" + path + "' with signature '" + s + "'."));
-        }
+        if (!obj)
+            return object().set_error(std::string("Failed to call constructor '" + path + "' with signature '" + s + "'."));
         return object(path, cid, obj);
     }
 
