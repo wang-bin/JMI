@@ -61,7 +61,7 @@ JNIEnv *getEnv() {
     if (env)
         cerr << "TLS has a JNIEnv* but not attatched. Maybe detatched by user." << endl;
 #ifdef OS_ANDROID
-    status = javaVM()->AttachCurrentThread(&env, nullptr);
+    status = javaVM()->AttachCurrentThread(&env, nullptr); //JavaVMAttachArgs
 #else
     status = javaVM()->AttachCurrentThread((void**)&env, nullptr);
 #endif
@@ -103,6 +103,7 @@ std::string to_string(jstring s)
         return std::string();
     std::string ss(cs);
     getEnv()->ReleaseStringUTFChars(s, cs);
+    //getEnv()->DeleteLocalRef(s);
     return ss;
 }
 
@@ -217,10 +218,6 @@ static bool from_j(JNIEnv *env, jarray arr, T &container) {
     }
     return true;
 }
-template<typename T>
-static bool from_j(jarray arr, T &container) {
-    return from_j(getEnv(), arr, container);
-}
 // Get an element of a java array
 template<typename T>
 static bool fromJArrayElement(JNIEnv *env, jarray arr, size_t position, T &out);
@@ -265,10 +262,6 @@ static T from_j(JNIEnv *env, jobject obj) {
     assert(result);
     return out;
 }
-template<typename T>
-static T from_j(jobject obj) {
-    return from_j<T>(getEnv(), obj);
-}
 template<>
 bool from_j(JNIEnv *env, jobject obj, std::string &out) {
     if (!obj) {
@@ -281,6 +274,7 @@ bool from_j(JNIEnv *env, jobject obj, std::string &out) {
         return false;
     out = chars;
     env->ReleaseStringUTFChars(jstr, chars);
+    env->DeleteLocalRef(jstr);
     return true;
 }
 template<>
@@ -368,13 +362,10 @@ object object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodI
     return from_j<object>(env, call_static_method<jobject>(env, classId, methodId, args));
 }
 
-template<> jvalue object::to_jvalue(const bool &obj) { return jvalue{.z = obj};}
 template<> jvalue object::to_jvalue(const jboolean &obj) { return jvalue{.z = obj};}
 template<> jvalue object::to_jvalue(const jbyte &obj) { return jvalue{.b = obj};}
-template<> jvalue object::to_jvalue(const char &obj) { return jvalue{.b = (jbyte)obj};}
 template<> jvalue object::to_jvalue(const jchar &obj) { return jvalue{.c = obj};}
 template<> jvalue object::to_jvalue(const jshort &obj) { return jvalue{.s = obj};}
-template<> jvalue object::to_jvalue(const unsigned &obj) { return jvalue{.i = jint(obj)};}
 template<> jvalue object::to_jvalue(const jint &obj) { return jvalue{.i = obj};}
 template<> jvalue object::to_jvalue(const jlong &obj) { return jvalue{.j = obj};}
 template<> jvalue object::to_jvalue(const jfloat &obj) { return jvalue{.f = obj};}
@@ -399,11 +390,11 @@ jarray object::to_jarray(JNIEnv *env, const bool&, size_t size) {
 }
 template<>
 jarray object::to_jarray(JNIEnv *env, const char&, size_t size) {
-    return env->NewByteArray(size);
+    return env->NewByteArray(size); // must DeleteLocalRef
 }
 template<>
 jarray object::to_jarray(JNIEnv *env, const jbyte&, size_t size) {
-    return env->NewByteArray(size);
+    return env->NewByteArray(size); // must DeleteLocalRef
 }
 template<>
 jarray object::to_jarray(JNIEnv *env, const jchar&, size_t size) {

@@ -21,15 +21,12 @@ std::string to_string(jstring s);
 jstring from_string(const std::string& s);
 
 template<typename T> struct signature;
-template<> struct signature<bool> { static const char value = 'Z';};
 template<> struct signature<jboolean> { static const char value = 'Z';};
 template<> struct signature<jbyte> { static const char value = 'B';};
-template<> struct signature<char> { static const char value = 'B';};
 template<> struct signature<jchar> { static const char value = 'C';};
 template<> struct signature<jshort> { static const char value = 'S';};
 template<> struct signature<jlong> { static const char value = 'J';};
 template<> struct signature<jint> { static const char value = 'I';};
-template<> struct signature<unsigned> { static const char value = 'I';};
 template<> struct signature<jfloat> { static const char value = 'F';};
 template<> struct signature<jdouble> { static const char value = 'D';};
 template<> struct signature<std::string> { constexpr static const char* value = "Ljava/lang/String;";};
