@@ -12,7 +12,6 @@
 #include <string>
 #include <type_traits>
 #include <vector>
-
 namespace jmi {
 
 JavaVM* javaVM(JavaVM *vm = nullptr);
@@ -36,7 +35,11 @@ template<> struct signature<jdouble> { static const char value = 'D';};
 template<> struct signature<std::string> { constexpr static const char* value = "Ljava/lang/String;";};
 template<> struct signature<char*> { constexpr static const char* value = "Ljava/lang/String;";};
 
-template<typename T, typename std::enable_if<!std::is_pointer<T>::value, int>::type = 0>
+// T* and T(&)[N] are treated as the same. use enable_if to select 1 of them. The function parameter is (const T&), so the default implemention of signature_of(const T&) must check is_pointer too.
+template<typename T> using if_pointer = typename std::enable_if<std::is_pointer<T>::value, bool>::type;
+template<typename T> using if_not_pointer = typename std::enable_if<!std::is_pointer<T>::value, bool>::type;
+template<typename T> using if_array = typename std::enable_if<std::is_array<T>::value, bool>::type;
+template<typename T, if_not_pointer<T> = true>
 inline std::string signature_of(const T&) {
     return {signature<T>::value}; // initializer supports both char and char*
 }
@@ -75,8 +78,7 @@ inline std::string signature_of(const std::reference_wrapper<T[N]>&) {
     //return signature_of<T,N>((T[N]){}); //aggregated initialize. FIXME: why reference_wrapper ctor is called?
 }
 
-// T* and T(&)[N] are treated as the same. use enable_if to select 1 of them. The function parameter is (const T&), so the default implemention of signature_of(const T&) must check is_pointer too.
-template<typename T, typename std::enable_if<std::is_pointer<T>::value, int>::type = 0>
+template<typename T, if_pointer<T> = true>
 inline std::string signature_of(const T&) { return {signature<jlong>::value};}
 template<typename T, std::size_t N>
 inline std::string signature_of(const T(&)[N]) { return std::string({'['}).append({signature_of(T())});}
@@ -119,7 +121,7 @@ public:
             env->ExceptionClear();
             return object(path).set_error(std::string("Failed to find constructor '" + path + "' with signature '" + s + "'."));
         }
-        jobject obj = env->NewObjectA(cid, mid, ptr0(to_jvalues(std::forward<Args>(args)...)));
+        jobject obj = env->NewObjectA(cid, mid, ptr0(to_jvalues(std::forward<Args>(args)...))); // ptr0(jv) crash
         if (env->ExceptionCheck()) {
             env->ExceptionDescribe();
             env->ExceptionClear();
@@ -251,7 +253,8 @@ private:
     static std::array<jvalue,0> to_jvalues() { return std::array<jvalue,0>();}
 
     template<typename Arg, typename... Args>
-    static std::string make_sig(Arg&& arg, Args&&... args) {
+    static std::string make_sig(Arg&& arg, Args&&... args) { // initializer_list + (a, b)
+        //std::initializer_list({(s+=signature_of<Args>(args), 0)...});
         return signature_of(std::forward<Arg>(arg)).append(make_sig(std::forward<Args>(args)...));
     }
     static std::string make_sig() {return std::string();}
