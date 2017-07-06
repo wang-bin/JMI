@@ -50,7 +50,7 @@ JNIEnv *getEnv() {
         pthread_key_create(&key_, [](void*){
             JNIEnv* env = nullptr;
             if (javaVM()->GetEnv((void**)&env, JNI_VERSION_1_4) == JNI_EDETACHED)
-                return;
+                return; //
             int status = javaVM()->DetachCurrentThread();
             if (status != JNI_OK)
                 cerr <<  "DetachCurrentThread error: " << status << endl;
@@ -130,8 +130,8 @@ bool object::operator==(const object &other) const {
     JNIEnv *env = getEnv();
     if (!env)
         return false;
-    jobject a = instance();
-    jobject b = other.instance();
+    jobject a = instance_;
+    jobject b = other;
     if (a && b)
         return env->IsSameObject(a, b);
     a = get_class();
@@ -147,10 +147,12 @@ void object::init(jobject obj_id, jclass class_id, const std::string &class_path
     std::replace(class_path_.begin(), class_path_.end(), '.', '/');
     jclass cid = nullptr;
     if (!class_id) {
-        if (obj_id)
-            cid = env->GetObjectClass(obj_id); // TODO: clear class_path?
-        else if (!class_path.empty())
+        if (obj_id) {
+            cid = env->GetObjectClass(obj_id);
+            //class_path.clear();
+        } else if (!class_path.empty()) {
             cid = (jclass)env->FindClass(class_path_.data());
+        }
     }
     auto checker = call_on_exit([=]{
         if (env->ExceptionCheck()) {
@@ -361,7 +363,7 @@ template<> jvalue object::to_jvalue(const jlong &obj) { return jvalue{.j = obj};
 template<> jvalue object::to_jvalue(const jfloat &obj) { return jvalue{.f = obj};}
 template<> jvalue object::to_jvalue(const jdouble &obj) { return jvalue{.d = obj};}
 template<> jvalue object::to_jvalue(const object &obj) {
-    return to_jvalue(obj.instance());
+    return to_jvalue(obj.instance_);
 }
 template<> jvalue object::to_jvalue(const std::string &obj) {
     return to_jvalue(getEnv()->NewStringUTF(obj.c_str()));
@@ -485,7 +487,7 @@ void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, cons
 }
 template<>
 void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const object &elm) {
-    set_jarray(env, arr, position, n, elm.instance());
+    set_jarray(env, arr, position, n, elm.instance_);
 }
 
 template<> void object::from_jvalue(const jvalue& v, bool& t) { t = v.z;}

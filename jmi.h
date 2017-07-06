@@ -96,7 +96,8 @@ public:
     operator bool() const { return !!instance_;}
     jclass get_class() const { return class_;}
     const std::string &class_path() const { return class_path_;}
-    jobject instance() const { return instance_;} // get(), operator jobject()
+    jobject instance() const { return instance_;}
+    operator jobject() const { return instance_;}
     bool instance_of(const std::string &class_path) const;
     std::string signature() const { return "L" + class_path_ + ";";}
     std::string error() const {return error_;}
