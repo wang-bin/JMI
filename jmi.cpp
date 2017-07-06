@@ -74,12 +74,13 @@ JNIEnv *getEnv() {
 
 std::string to_string(jstring s)
 {
-    const char* cs = getEnv()->GetStringUTFChars(s, 0);
+    JNIEnv *env = getEnv();
+    const char* cs = env->GetStringUTFChars(s, 0);
     if (!cs)
         return std::string();
     std::string ss(cs);
-    getEnv()->ReleaseStringUTFChars(s, cs);
-    //getEnv()->DeleteLocalRef(s);
+    env->ReleaseStringUTFChars(s, cs);
+    env->DeleteLocalRef(s);
     return ss;
 }
 
@@ -144,20 +145,23 @@ void object::init(jobject obj_id, jclass class_id, const std::string &class_path
     JNIEnv *env = getEnv();
     class_path_ = class_path;
     std::replace(class_path_.begin(), class_path_.end(), '.', '/');
+    jclass cid = nullptr;
     if (!class_id) {
         if (obj_id)
-            class_id = env->GetObjectClass(obj_id); // TODO: clear class_path?
+            cid = env->GetObjectClass(obj_id); // TODO: clear class_path?
         else if (!class_path.empty())
-            class_id = (jclass)env->FindClass(class_path_.data());
+            cid = (jclass)env->FindClass(class_path_.data());
     }
     auto checker = call_on_exit([=]{
         if (env->ExceptionCheck()) {
             env->ExceptionDescribe();
             env->ExceptionClear();
         }
-        if (class_id)
-            env->DeleteLocalRef(class_id);
+        if (cid)
+            env->DeleteLocalRef(cid);
     });
+    if (cid)
+        class_id = cid;
     if (!class_id)
         return;
     class_ = (jclass)env->NewGlobalRef(class_id);
@@ -498,12 +502,13 @@ template<> void object::from_jvalue(const jvalue& v, float& t) { t = v.f;}
 template<> void object::from_jvalue(const jvalue& v, double& t) { t = v.d;}
 template<> void object::from_jvalue(const jvalue& v, std::string& t)
 {
+    JNIEnv *env = getEnv();
     const jstring s = static_cast<jstring>(v.l);
-    const char* cs = getEnv()->GetStringUTFChars(s, 0);
+    const char* cs = env->GetStringUTFChars(s, 0);
     if (!cs)
         return;
     t = cs;
-    getEnv()->ReleaseStringUTFChars(s, cs);
+    env->ReleaseStringUTFChars(s, cs);
 }
 
 template<> void object::from_jarray(const jvalue& v, jboolean* t, std::size_t N)
