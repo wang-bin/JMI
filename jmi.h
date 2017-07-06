@@ -4,8 +4,8 @@
  * MIT License
  */
 #pragma once
-
-#include <array> // TODO: check cpp14 around
+// TODO: call getEnv() less internally
+#include <array>
 #include <functional> // std::ref
 #include <jni.h>
 #include <set>
@@ -42,26 +42,35 @@ inline std::string signature_of(const T&) {
 inline std::string signature_of(const char*) { return "Ljava/lang/String;";}
 inline std::string signature_of() { return {'V'};}
 // for base types, {'[', signature<T>::value};
-// TODO: stl container forward declare only
-template<typename T>
-inline std::string signature_of(const std::vector<T>&) {
-    return std::string({'['}).append({signature_of(T())});
-}
-template<typename T>
-inline std::string signature_of(const std::set<T>&) {
-    return std::string({'['}).append({signature_of(T())});
-}
+
 template<typename T, std::size_t N>
 inline std::string signature_of(const std::array<T, N>&) {
     return std::string({'['}).append({signature_of(T())});
 }
+
+template<typename T, if_pointer<T> = true>
+inline std::string signature_of(const T&) { return {signature<jlong>::value};}
+template<typename T, std::size_t N>
+inline std::string signature_of(const T(&)[N]) { return std::string({'['}).append({signature_of(T())});}
+
 /*
 template<typename T, typename V>
 std::string signature_of(const std::unordered_map<T, V>&) {
-
 }*/
 
-// define reference_wrapper at last. assume we only use reference_wrapper<...>, no container<reference_wrapper<...>>
+// TODO: stl container forward declare only
+// TODO: if_jarray_continuous
+template<template<typename, class...> class C, typename T, class... Args> struct is_jarray;
+// exclude std::basic_string etc.
+template<typename T, class... Args> struct is_jarray<std::vector, T, Args...> : public std::true_type {};
+template<typename T, class... Args> struct is_jarray<std::set, T, Args...> : public std::true_type {};
+template<template<typename, class...> class C, typename T, class... Args> using if_jarray = typename std::enable_if<is_jarray<C, T, Args...>::value, bool>::type;
+template<template<typename, class...> class C, typename T, class... Args, if_jarray<C, T, Args...> = true>
+inline std::string signature_of(const C<T, Args...>&) {
+    return std::string({'['}).append({signature_of(T())});
+}
+
+// NOTE: define reference_wrapper at last. assume we only use reference_wrapper<...>, no container<reference_wrapper<...>>
 template<typename T>
 inline std::string signature_of(const std::reference_wrapper<T>&) {
     return signature_of(T()); //TODO: no construct
@@ -69,15 +78,9 @@ inline std::string signature_of(const std::reference_wrapper<T>&) {
 template<typename T, std::size_t N>
 inline std::string signature_of(const std::reference_wrapper<T[N]>&) {
     return std::string({'['}).append({signature_of(T())});
-    //T t[N];
-    //return signature_of<T,N>(t); //aggregated initialize. FIXME: why reference_wrapper ctor is called?
-    //return signature_of<T,N>((T[N]){}); //aggregated initialize. FIXME: why reference_wrapper ctor is called?
+    //return signature_of<T,N>((T[N]){}); //aggregated initialize. can not use declval?
 }
 
-template<typename T, if_pointer<T> = true>
-inline std::string signature_of(const T&) { return {signature<jlong>::value};}
-template<typename T, std::size_t N>
-inline std::string signature_of(const T(&)[N]) { return std::string({'['}).append({signature_of(T())});}
 
 class object {
 public:
@@ -90,10 +93,6 @@ public:
     object &operator=(const object &other);
     object &operator=(object &&other);
     bool operator==(const object &other) const;
-    /*!
-     * \brief operator bool
-     * \return true if it's an jobject instance
-     */
     operator bool() const { return !!instance_;}
     jclass get_class() const { return class_;}
     const std::string &class_path() const { return class_path_;}
@@ -102,7 +101,6 @@ public:
     std::string signature() const { return "L" + class_path_ + ";";}
     std::string error() const {return error_;}
 
-     // TODO: return shared_ptr?
     template<typename... Args>
     static object create(const std::string &path, Args&&... args) {
         using namespace std;
@@ -146,7 +144,7 @@ public:
         const jclass cid = get_class();
         if (!cid)
             return T();
-        const jobject oid = instance();
+        const jobject oid = instance_;
         if (!oid) {
             set_error("invalid object instance");
             return T();
@@ -213,7 +211,7 @@ private:
     jobject instance_ = nullptr;
     jclass class_ = nullptr;
     mutable std::string error_;
-    std::string class_path_; // class_
+    std::string class_path_;
 
     void init(jobject obj_id, jclass class_id, const std::string &class_path = std::string());
     object& set_error(const std::string& err);
