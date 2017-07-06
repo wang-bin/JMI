@@ -5,7 +5,7 @@
  */
 #pragma once
 
-#include <array>
+#include <array> // TODO: check cpp14 around
 #include <functional> // std::ref
 #include <jni.h>
 #include <set>
@@ -79,7 +79,6 @@ inline std::string signature_of(const T&) { return {signature<jlong>::value};}
 template<typename T, std::size_t N>
 inline std::string signature_of(const T(&)[N]) { return std::string({'['}).append({signature_of(T())});}
 
-
 class object {
 public:
     object(const std::string &class_path, jclass class_id = nullptr, jobject jobj = nullptr);
@@ -106,13 +105,14 @@ public:
      // TODO: return shared_ptr?
     template<typename... Args>
     static object create(const std::string &path, Args&&... args) {
+        using namespace std;
         if (path.empty())
             return object();
         JNIEnv *env = getEnv();
         if (!env)
             return object();
-        std::string cpath(path);
-        std::replace(cpath.begin(), cpath.end(), '.', '/');
+        string cpath(path);
+        replace(cpath.begin(), cpath.end(), '.', '/');
         const jclass cid = (jclass)env->FindClass(path.c_str());
         auto checker = call_on_exit([=]{
             if (env->ExceptionCheck()) {
@@ -124,13 +124,13 @@ public:
         });
         if (!cid)
             return object().set_error("invalid class path: " + path);
-        const std::string s(args_signature(std::forward<Args>(args)...).append(signature_of())); // void
+        const string s(args_signature(forward<Args>(args)...).append(signature_of())); // void
         const jmethodID mid = env->GetMethodID(cid, "<init>", s.c_str());
         if (!mid)
-            return object().set_error(std::string("Failed to find constructor '" + path + "' with signature '" + s + "'."));
-        jobject obj = env->NewObjectA(cid, mid, ptr0(to_jvalues(std::forward<Args>(args)...))); // ptr0(jv) crash
+            return object().set_error(string("Failed to find constructor '" + path + "' with signature '" + s + "'."));
+        jobject obj = env->NewObjectA(cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args))...}).begin())); // ptr0(jv) crash
         if (!obj)
-            return object().set_error(std::string("Failed to call constructor '" + path + "' with signature '" + s + "'."));
+            return object().set_error(string("Failed to call constructor '" + path + "' with signature '" + s + "'."));
         return object(path, cid, obj);
     }
 
@@ -141,6 +141,7 @@ public:
     }
     template<typename T, typename... Args>
     T call_with(const std::string &name, const std::string &signature, Args&& ...args) {
+        using namespace std;
         error_.clear();
         const jclass cid = get_class();
         if (!cid)
@@ -161,7 +162,7 @@ public:
         const jmethodID mid = env->GetMethodID(cid, name.c_str(), signature.c_str());
         if (!mid || env->ExceptionCheck())
             return T();
-        return call_method_set_ref<T>(env, oid, mid, object::ptr0(to_jvalues(std::forward<Args>(args)...)), std::forward<Args>(args)...);
+        return call_method_set_ref<T>(env, oid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args))...}).begin()), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
@@ -180,6 +181,7 @@ public:
 
     template<typename T, typename... Args>
     T call_static_with(const std::string &name, const std::string &signature, Args&&... args) {
+        using namespace std;
         error_.clear();
         const jclass cid = get_class();
         if (!cid)
@@ -195,7 +197,7 @@ public:
         const jmethodID mid = env->GetStaticMethodID(cid, name.c_str(), signature.c_str());
         if (!mid || env->ExceptionCheck())
             return T();
-        return call_static_method_set_ref<T>(env, cid, mid, object::ptr0(to_jvalues(std::forward<Args>(args)...)), std::forward<Args>(args)...);
+        return call_static_method_set_ref<T>(env, cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args))...}).begin()), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
@@ -246,15 +248,6 @@ private:
     static std::string args_signature(Args&&... args) {
         return "(" + make_sig(std::forward<Args>(args)...) + ")";
     }
-
-    template<typename... Args>
-    static std::array<jvalue, sizeof...(Args)> to_jvalues(Args&&... args) {
-        std::array<jvalue, sizeof...(Args)> jargs;
-        set_jvalues(&std::get<0>(jargs), std::forward<Args>(args)...);
-        //snprintf(nullptr, 0, "jargs: %p\n", &jargs[0]);fflush(0); // why this line works as magic? here or in set_jvalues()
-        return jargs;
-    }
-    static std::array<jvalue,0> to_jvalues() { return std::array<jvalue,0>();}
 
     template<typename Arg, typename... Args>
     static std::string make_sig(Arg&& arg, Args&&... args) { // initializer_list + (a, b)
@@ -326,8 +319,6 @@ private:
 
     template<typename T>
     static void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const T &elm);
-    template<typename T, std::size_t N> static T* ptr0(std::array<T,N> a) { return &std::get<0>(a);}
-    template<typename T> static T* ptr0(std::array<T,0>) {return nullptr;} // overload, not partial specialization (disallowed)
 
     template<typename T> static void from_jvalue(const jvalue& v, T &t);
     template<typename T> static void from_jvalue(const jvalue& v, T *t, std::size_t n = 0) { // T* and T(&)[N] is the same
