@@ -5,6 +5,7 @@
  */
 #pragma once
 // TODO: call getEnv() less internally
+// TODO: cache class, method, field id
 #include <array>
 #include <functional> // std::ref
 #include <jni.h>
@@ -59,7 +60,7 @@ std::string signature_of(const std::unordered_map<T, V>&) {
 }*/
 
 // TODO: stl container forward declare only
-// TODO: if_jarray_continuous
+// TODO: if_jarray_continuous, is_jcontainer
 template<template<typename, class...> class C, typename T, class... Args> struct is_jarray;
 // exclude std::basic_string etc.
 template<typename T, class... Args> struct is_jarray<std::vector, T, Args...> : public std::true_type {};
@@ -114,10 +115,7 @@ public:
         replace(cpath.begin(), cpath.end(), '.', '/');
         const jclass cid = (jclass)env->FindClass(cpath.c_str());
         auto checker = call_on_exit([=]{
-            if (env->ExceptionCheck()) {
-                env->ExceptionDescribe();
-                env->ExceptionClear();
-            }
+            handle_exception(env);
             if (cid)
                 env->DeleteLocalRef(cid);
         });
@@ -152,11 +150,8 @@ public:
         }
         JNIEnv *env = getEnv();
         auto checker = call_on_exit([=]{
-            if (env->ExceptionCheck()) {
-                env->ExceptionDescribe();
-                env->ExceptionClear();
+            if (handle_exception(env))
                 set_error(std::string("Failed to call method '") + name + "' with signature '" + signature + "'.");
-            }
         });
         const jmethodID mid = env->GetMethodID(cid, name.c_str(), signature.c_str());
         if (!mid || env->ExceptionCheck())
@@ -187,11 +182,8 @@ public:
             return T();
         JNIEnv *env = getEnv();
         auto checker = call_on_exit([=]{
-            if (env->ExceptionCheck()) {
-                env->ExceptionDescribe();
-                env->ExceptionClear();
+            if (handle_exception(env))
                 set_error(std::string("Failed to call static method '") + name + "'' with signature '" + signature + "'.");
-            }
         });
         const jmethodID mid = env->GetStaticMethodID(cid, name.c_str(), signature.c_str());
         if (!mid || env->ExceptionCheck())
@@ -214,6 +206,13 @@ private:
     mutable std::string error_;
     std::string class_path_;
 
+    static bool handle_exception(JNIEnv* env) {
+        if (!env->ExceptionCheck())
+            return false;
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        return true;
+    }
     void init(jobject obj_id, jclass class_id, const std::string &class_path = std::string());
     object& set_error(const std::string& err);
     void reset();

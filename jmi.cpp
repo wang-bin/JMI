@@ -155,10 +155,7 @@ void object::init(jobject obj_id, jclass class_id, const std::string &class_path
         }
     }
     auto checker = call_on_exit([=]{
-        if (env->ExceptionCheck()) {
-            env->ExceptionDescribe();
-            env->ExceptionClear();
-        }
+        handle_exception(env);
         if (cid)
             env->DeleteLocalRef(cid);
     });
