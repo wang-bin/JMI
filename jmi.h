@@ -122,7 +122,7 @@ public:
         });
         if (!cid)
             return object().set_error("invalid class path: " + cpath);
-        const string s(args_signature(forward<Args>(args)...).append(signature_of())); // void
+        static const string s(args_signature(forward<Args>(args)...).append(signature_of())); // void
         const jmethodID mid = env->GetMethodID(cid, "<init>", s.c_str());
         if (!mid)
             return object().set_error(string("Failed to find constructor '" + cpath + "' with signature '" + s + "'."));
@@ -135,7 +135,8 @@ public:
     // use call_with with signature for method whose return type is object
     template<typename T, typename... Args>
     T call(const std::string &name, Args&&... args) {
-        return call_with<T>(name, args_signature(std::forward<Args>(args)...).append(signature_of(T())), std::forward<Args>(args)...);
+        static const std::string s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+        return call_with<T>(name, s, std::forward<Args>(args)...);
     }
     template<typename T, typename... Args>
     T call_with(const std::string &name, const std::string &signature, Args&& ...args) {
@@ -162,7 +163,8 @@ public:
 
     template<typename... Args>
     void call(const std::string &name, Args&&... args) {
-        call_with(name, args_signature(std::forward<Args>(args)...).append(signature_of()), std::forward<Args>(args)...);
+        static const std::string s = args_signature(std::forward<Args>(args)...).append(signature_of());
+        call_with(name, s, std::forward<Args>(args)...);
     }
     template<typename... Args>
     void call_with(const std::string &name, const std::string &signature, Args&&... args) {
@@ -171,7 +173,8 @@ public:
 
     template<typename T, typename... Args>
     T call_static(const std::string &name, Args&&... args) {
-        return call_static_with<T>(name, args_signature(std::forward<Args>(args)...).append(signature_of(T())), std::forward<Args>(args)...);
+        static const std::string s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+        return call_static_with<T>(name, s, std::forward<Args>(args)...);
     }
 
     template<typename T, typename... Args>
@@ -194,7 +197,8 @@ public:
 
     template<typename... Args>
     void call_static(const std::string &name, Args&&... args) {
-        call_static_with(name, args_signature(std::forward<Args>(args)...).append(signature_of()), std::forward<Args>(args)...);
+        static const std::string s = args_signature(std::forward<Args>(args)...).append(signature_of());
+        call_static_with(name, s, std::forward<Args>(args)...);
     }
     template<typename... Args>
     void call_static_with(const std::string &name, const std::string &signature, Args&&... args) {
@@ -245,7 +249,8 @@ private:
 
     template<typename... Args>
     static std::string args_signature(Args&&... args) {
-        return "(" + make_sig(std::forward<Args>(args)...) + ")";
+        static std::string s("(" + make_sig(std::forward<Args>(args)...) + ")");
+        return s;
     }
 
     template<typename Arg, typename... Args>
