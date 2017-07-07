@@ -1,15 +1,14 @@
 # JMI
 **_JNI Modern Interface in C++_**
 
-Writing type signatures in JNI is boring and mistakeable. They are disappeared in JMI.
-
 ### Features
 
 - Signature generation is done by compiler
 - getEnv() at any thread without caring about when to detach
+- Support both In & Out parameters for JNI methods
 
 ### Example:
-- Setup java vm: `jmi::javaVM(vm);`
+- Setup java vm in `JNI_OnLoad`: `jmi::javaVM(vm);`
 - Create a SurfaceTexture: 
 ```
     jmi:object st = jmi::object::create("android/graphics/SurfaceTexture", tex);
@@ -40,8 +39,9 @@ Writing type signatures in JNI is boring and mistakeable. They are disappeared i
 
 ### Known Issues
 
-### TODO
+- If return type and first n arguments of call/call_static are the same, explicitly specifying return type and n arguments type is required
 
+### TODO
 
 #### MIT License
 >Copyright (c) 2016 WangBin
