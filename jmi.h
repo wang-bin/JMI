@@ -46,18 +46,17 @@ inline std::string signature_of() { return {'V'};}
 
 template<typename T, std::size_t N>
 inline std::string signature_of(const std::array<T, N>&) {
-    return std::string({'['}).append({signature_of(T())});
+    static auto s = std::string({'['}).append({signature_of(T())});
+    return s;
 }
 
 template<typename T, if_pointer<T> = true>
 inline std::string signature_of(const T&) { return {signature<jlong>::value};}
 template<typename T, std::size_t N>
-inline std::string signature_of(const T(&)[N]) { return std::string({'['}).append({signature_of(T())});}
-
-/*
-template<typename T, typename V>
-std::string signature_of(const std::unordered_map<T, V>&) {
-}*/
+inline std::string signature_of(const T(&)[N]) { 
+    static auto s = std::string({'['}).append({signature_of(T())});
+    return s;
+}
 
 // TODO: stl container forward declare only
 // TODO: if_jarray_continuous, is_jcontainer
@@ -68,18 +67,21 @@ template<typename T, class... Args> struct is_jarray<std::set, T, Args...> : pub
 template<template<typename, class...> class C, typename T, class... Args> using if_jarray = typename std::enable_if<is_jarray<C, T, Args...>::value, bool>::type;
 template<template<typename, class...> class C, typename T, class... Args, if_jarray<C, T, Args...> = true>
 inline std::string signature_of(const C<T, Args...>&) {
-    return std::string({'['}).append({signature_of(T())});
+    static std::string s = std::string({'['}).append({signature_of(T())});
+    return s;
 }
 
 // NOTE: define reference_wrapper at last. assume we only use reference_wrapper<...>, no container<reference_wrapper<...>>
 template<typename T>
 inline std::string signature_of(const std::reference_wrapper<T>&) {
-    return signature_of(T()); //TODO: no construct
+    static std::string s = signature_of(T()); //TODO: no construct
+    return s;
 }
 template<typename T, std::size_t N>
 inline std::string signature_of(const std::reference_wrapper<T[N]>&) {
-    return std::string({'['}).append({signature_of(T())});
+    static std::string s = std::string({'['}).append({signature_of(T())});
     //return signature_of<T,N>((T[N]){}); //aggregated initialize. can not use declval?
+    return s;
 }
 
 
