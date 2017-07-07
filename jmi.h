@@ -4,7 +4,6 @@
  * MIT License
  */
 #pragma once
-// TODO: call getEnv() less internally
 // TODO: cache class, method, field id
 #include <array>
 #include <functional> // std::ref
@@ -17,8 +16,8 @@ namespace jmi {
 
 JavaVM* javaVM(JavaVM *vm = nullptr);
 JNIEnv *getEnv();
-std::string to_string(jstring s);
-jstring from_string(const std::string& s);
+std::string to_string(jstring s, JNIEnv* env = nullptr);
+jstring from_string(const std::string& s, JNIEnv* env = nullptr);
 
 template<typename T> struct signature;
 template<> struct signature<jboolean> { static const char value = 'Z';};
@@ -87,9 +86,9 @@ inline std::string signature_of(const std::reference_wrapper<T[N]>&) {
 
 class object {
 public:
-    object(const std::string &class_path, jclass class_id = nullptr, jobject jobj = nullptr);
-    object(jclass class_id, jobject jobj = nullptr);
-    object(jobject jobj = nullptr);
+    object(const std::string &class_path, jclass class_id = nullptr, jobject jobj = nullptr, JNIEnv* env = nullptr);
+    object(jclass class_id, jobject jobj = nullptr, JNIEnv* env = nullptr);
+    object(jobject jobj = nullptr, JNIEnv* env = nullptr);
     object(const object &other);
     object(object &&other);
     ~object() { reset();}
@@ -127,10 +126,10 @@ public:
         const jmethodID mid = env->GetMethodID(cid, "<init>", s.c_str());
         if (!mid)
             return object().set_error(string("Failed to find constructor '" + cpath + "' with signature '" + s + "'."));
-        jobject obj = env->NewObjectA(cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args))...}).begin())); // ptr0(jv) crash
+        jobject obj = env->NewObjectA(cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin())); // ptr0(jv) crash
         if (!obj)
             return object().set_error(string("Failed to call constructor '" + cpath + "' with signature '" + s + "'."));
-        return object(cpath, cid, obj);
+        return object(cpath, cid, obj, env);
     }
 
     // use call_with with signature for method whose return type is object
@@ -158,7 +157,7 @@ public:
         const jmethodID mid = env->GetMethodID(cid, name.c_str(), signature.c_str());
         if (!mid || env->ExceptionCheck())
             return T();
-        return call_method_set_ref<T>(env, oid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args))...}).begin()), std::forward<Args>(args)...);
+        return call_method_set_ref<T>(env, oid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin()), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
@@ -190,7 +189,7 @@ public:
         const jmethodID mid = env->GetStaticMethodID(cid, name.c_str(), signature.c_str());
         if (!mid || env->ExceptionCheck())
             return T();
-        return call_static_method_set_ref<T>(env, cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args))...}).begin()), std::forward<Args>(args)...);
+        return call_static_method_set_ref<T>(env, cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin()), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
@@ -215,9 +214,9 @@ private:
         env->ExceptionClear();
         return true;
     }
-    void init(jobject obj_id, jclass class_id, const std::string &class_path = std::string());
+    void init(JNIEnv *env, jobject obj_id, jclass class_id, const std::string &class_path = std::string());
     object& set_error(const std::string& err);
-    void reset();
+    void reset(JNIEnv *env = nullptr);
 
     template<class F>
     class scope_exit_handler {
@@ -256,38 +255,34 @@ private:
     }
     static std::string make_sig() {return std::string();}
 
-    template<typename Arg, typename... Args>
-    static void set_jvalues(jvalue *jargs, Arg&& arg, Args&&... args) {
-        *jargs = to_jvalue(arg);
-        set_jvalues(jargs + 1, std::forward<Args>(args)...);
-    }
-    static void set_jvalues(jvalue*) {}
-
-    template<typename T> static jvalue to_jvalue(const T &obj);
-    template<typename T> static jvalue to_jvalue(T *obj) { return to_jvalue((jlong)obj); } // jobject is _jobject*?
-    static jvalue to_jvalue(const char* obj);// { return to_jvalue(std::string(obj)); }
-    template<typename T> static jvalue to_jvalue(const std::vector<T> &obj) { return to_jvalue(to_jarray(obj)); }
-    template<typename T> static jvalue to_jvalue(const std::set<T> &obj) { return to_jvalue(to_jarray(obj));}
-    template<typename T, std::size_t N> static jvalue to_jvalue(const std::array<T, N> &obj) { return to_jvalue(to_jarray(obj)); }
-    template<typename C> static jvalue to_jvalue(const std::reference_wrapper<C>& c) { return to_jvalue(to_jarray(c.get(), true)); }
-    template<typename T, std::size_t N> static jvalue to_jvalue(const std::reference_wrapper<T[N]>& c) { return to_jvalue(to_jarray<T,N>(c.get(), true)); }
+    // env can be null for base types
+    template<typename T> static jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr);
+    template<typename T> static jvalue to_jvalue(T *obj, JNIEnv* env) { return to_jvalue((jlong)obj, env); } // jobject is _jobject*?
+    static jvalue to_jvalue(const char* obj, JNIEnv* env);// { return to_jvalue(std::string(obj)); }
+    template<typename T> static jvalue to_jvalue(const std::vector<T> &obj, JNIEnv* env) { return to_jvalue(to_jarray(env, obj), env); }
+    template<typename T> static jvalue to_jvalue(const std::set<T> &obj, JNIEnv* env) { return to_jvalue(to_jarray(env, obj), env);}
+    template<typename T, std::size_t N> static jvalue to_jvalue(const std::array<T, N> &obj, JNIEnv* env) { return to_jvalue(to_jarray(env, obj), env); }
+    template<typename C> static jvalue to_jvalue(const std::reference_wrapper<C>& c, JNIEnv* env) { return to_jvalue(to_jarray(env, c.get(), true), env); }
+    template<typename T, std::size_t N> static jvalue to_jvalue(const std::reference_wrapper<T[N]>& c, JNIEnv* env) { return to_jvalue(to_jarray<T,N>(env, c.get(), true), env); }
 #if 0
-    // can not defined as template specialization because to_jvalue(T*) will be choosed
-    // FIXME: why clang crashes but gcc is fine? why to_jvalue(const jlong&) works?
+    // can not defined as template specialization because to_jvalue(T*, JNIEnv* env) will be choosed
+    // FIXME: why clang crashes but gcc is fine? why to_jvalue(const jlong&, JNIEnv* env) works?
     // what if use jmi::object instead of jarray?
-    static jvalue to_jvalue(const jobject &obj) { return jvalue{.l = obj};}
-    static jvalue to_jvalue(const jarray &obj) { return jvalue{.l = obj};}
-    static jvalue to_jvalue(const jstring &obj) { return jvalue{.l = obj};}
+    static jvalue to_jvalue(const jobject &obj, JNIEnv* env) { return jvalue{.l = obj};}
+    static jvalue to_jvalue(const jarray &obj, JNIEnv* env) { return jvalue{.l = obj};}
+    static jvalue to_jvalue(const jstring &obj, JNIEnv* env) { return jvalue{.l = obj};}
 #endif
     template<typename T>
-    static jarray to_jarray(JNIEnv *env, const T &element, size_t size); // element is for getting jobject class
-    template<typename T, std::size_t N> static jarray to_jarray(const T(&c)[N], bool is_ref = false) {
+    static jarray make_jarray(JNIEnv *env, const T &element, size_t size); // element is for getting jobject class
+    template<typename T, std::size_t N>
+    static jarray to_jarray(JNIEnv* env, const T(&c)[N], bool is_ref = false) {
         static_assert(N > 0, "invalide array size");
-        JNIEnv *env = getEnv();
+        if (!env)
+            env = getEnv();
         if (!env)
             return nullptr;
         jarray arr = nullptr;
-        arr = to_jarray(env, c[0], N);
+        arr = make_jarray(env, c[0], N);
         if (!is_ref) {
             if (std::is_fundamental<T>::value) {
                 set_jarray(env, arr, 0, N, c[0]);
@@ -299,15 +294,17 @@ private:
         return arr;
     }
     // c++ container to jarray
-    template<typename C> static jarray to_jarray(const C &c, bool is_ref = false) {
-        JNIEnv *env = getEnv();
+    template<typename C>
+    static jarray to_jarray(JNIEnv* env, const C &c, bool is_ref = false) {
+        if(!env)
+            env = getEnv();
         if (!env)
             return nullptr;
         jarray arr = nullptr;
         if (c.empty())
-            arr = to_jarray(env, typename C::value_type(), 0);
+            arr = make_jarray(env, typename C::value_type(), 0);
         else
-            arr = to_jarray(env, *c.begin(), c.size()); // c.begin() is for getting jobject class
+            arr = make_jarray(env, *c.begin(), c.size()); // c.begin() is for getting jobject class
         if (!is_ref) {
             size_t i = 0;
             // TODO: set once for array, vector etc
@@ -320,54 +317,55 @@ private:
     template<typename T>
     static void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const T &elm);
 
-    template<typename T> static void from_jvalue(const jvalue& v, T &t);
-    template<typename T> static void from_jvalue(const jvalue& v, T *t, std::size_t n = 0) { // T* and T(&)[N] is the same
+    // env can be null for base types
+    template<typename T> static void from_jvalue(JNIEnv* env, const jvalue& v, T &t);
+    template<typename T> static void from_jvalue(JNIEnv* env, const jvalue& v, T *t, std::size_t n = 0) { // T* and T(&)[N] is the same
         if (n <= 0)
-            from_jvalue(v, (jlong&)t);
+            from_jvalue(env, v, (jlong&)t);
         else
-            from_jarray(v, t, n);
+            from_jarray(env, v, t, n);
     }
-    template<typename T> static void from_jvalue(const jvalue& v, std::vector<T> &t) { from_jarray(v, t.data(), t.size()); }
-    //template<typename T> static void from_jvalue(const jvalue& v, const std::set<T>: &t) { return from_jvalue(v, to_jarray(t));}
-    template<typename T, std::size_t N> static void from_jvalue(const jvalue& v, std::array<T, N> &t) { return from_jarray(v, t.data(), N); }
-    //template<typename T, std::size_t N> static void from_jvalue(const jvalue& v, T(&t)[N]) { return from_jarray(v, t, N); }
+    template<typename T> static void from_jvalue(JNIEnv* env, const jvalue& v, std::vector<T> &t) { from_jarray(env, v, t.data(), t.size()); }
+    //template<typename T> static void from_jvalue(JNIEnv* env, const jvalue& v, const std::set<T>: &t) { return from_jvalue(env, v, to_jarray(t));}
+    template<typename T, std::size_t N> static void from_jvalue(JNIEnv* env, const jvalue& v, std::array<T, N> &t) { return from_jarray(env, v, t.data(), N); }
+    //template<typename T, std::size_t N> static void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { return from_jarray(env, v, t, N); }
 
     template<typename T>
-    static void from_jarray(const jvalue& v, T* t, std::size_t N);
+    static void from_jarray(JNIEnv* env, const jvalue& v, T* t, std::size_t N);
 
     template<typename T>
-    static inline void set_ref_from_jvalue(jvalue* jargs, T) {
+    static inline void set_ref_from_jvalue(JNIEnv* env, jvalue* jargs, T) {
         using Tn = typename std::remove_reference<T>::type;
         if (!std::is_fundamental<Tn>::value && !std::is_pointer<Tn>::value)
-            getEnv()->DeleteLocalRef(jargs->l);
+            env->DeleteLocalRef(jargs->l);
     }
-    static inline void set_ref_from_jvalue(jvalue *jargs, const char* s) {
-        getEnv()->DeleteLocalRef(jargs->l);
+    static inline void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, const char* s) {
+        env->DeleteLocalRef(jargs->l);
     }
     template<typename T>
-    static inline void set_ref_from_jvalue(jvalue *jargs, std::reference_wrapper<T> ref) {
-        from_jvalue(*jargs, ref.get());
+    static inline void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, std::reference_wrapper<T> ref) {
+        from_jvalue(env, *jargs, ref.get());
         using Tn = typename std::remove_reference<T>::type;
         if (!std::is_fundamental<Tn>::value && !std::is_pointer<Tn>::value)
-            getEnv()->DeleteLocalRef(jargs->l);
+            env->DeleteLocalRef(jargs->l);
     }
     template<typename T, std::size_t N>
-    static inline void set_ref_from_jvalue(jvalue *jargs, std::reference_wrapper<T[N]> ref) {
-        from_jvalue(*jargs, ref.get(), N); // assume only T* and T[N]
-        getEnv()->DeleteLocalRef(jargs->l);
+    static inline void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, std::reference_wrapper<T[N]> ref) {
+        from_jvalue(env, *jargs, ref.get(), N); // assume only T* and T[N]
+        env->DeleteLocalRef(jargs->l);
     }
 
     template<typename Arg, typename... Args>
-    static void ref_args_from_jvalues(jvalue *jargs, Arg& arg, Args&&... args) {
-        set_ref_from_jvalue(jargs, arg);
-        ref_args_from_jvalues(jargs + 1, std::forward<Args>(args)...);
+    static void ref_args_from_jvalues(JNIEnv* env, jvalue *jargs, Arg& arg, Args&&... args) {
+        set_ref_from_jvalue(env, jargs, arg);
+        ref_args_from_jvalues(env, jargs + 1, std::forward<Args>(args)...);
     }
-    static void ref_args_from_jvalues(jvalue*) {}
+    static void ref_args_from_jvalues(JNIEnv* env, jvalue*) {}
 
     template<typename T, typename... Args>
     T call_method_set_ref(JNIEnv *env, jobject oid, jmethodID mid, jvalue *jargs, Args&&... args) {
         auto setter = call_on_exit([=]{
-            ref_args_from_jvalues(jargs, args...);
+            ref_args_from_jvalues(env, jargs, args...);
         });
        return call_method<T>(env, oid, mid, jargs);
     }
@@ -377,7 +375,7 @@ private:
     template<typename T, typename... Args>
     T call_static_method_set_ref(JNIEnv *env, jclass cid, jmethodID mid, jvalue *jargs, Args&&... args) {
         auto setter = call_on_exit([=]{
-            ref_args_from_jvalues(jargs, args...);
+            ref_args_from_jvalues(env, jargs, args...);
         });
         return call_static_method<T>(env, cid, mid, jargs);
     }
