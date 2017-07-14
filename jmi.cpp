@@ -199,54 +199,8 @@ object& object::set_error(const std::string& err) {
     return *this;
 }
 
-
-template<typename T>
-static bool from_j(JNIEnv *env, jarray arr, T &container) {
-    if (!arr)
-        return false;
-    jsize n = env->GetArrayLength(arr);
-    for (size_t i = 0; i < n; i++) {
-        typename T::value_type elm;
-        fromJArrayElement(env, arr, i, elm);
-        container.insert(container.end(), elm);
-    }
-    return true;
-}
-// Get an element of a java array
-template<typename T>
-static bool fromJArrayElement(JNIEnv *env, jarray arr, size_t position, T &out);
-template<typename T>
-static bool fromJArrayElement(JNIEnv *env, jarray arr, size_t position, std::vector<T> &out) {
-    jobject elm;
-    if (!fromJArrayElement(env, arr, position, elm))
-        return false;
-    return from_j(env, (jarray)elm, out);
-}
-template<typename T>
-static bool from_jcollection(JNIEnv *env, jobject obj, T &out) {
-    if (!obj)
-        return false;
-    object jcontainer(obj);
-    if (!jcontainer.instance_of("java.util.Collection"))
-        return false;
-    out = jcontainer.call<T>("toArray", out, out);
-    return true;
-}
-
 template<typename T>
 static bool from_j(JNIEnv *env, jobject obj, T &out);
-template<typename T>
-static bool from_j(JNIEnv *env, jobject obj, std::vector<T> &out) {
-    return from_jcollection(env, obj, out) || from_j(env, (jarray)obj, out);
-}
-template<typename T>
-static bool from_j(JNIEnv *env, jobject obj, std::set<T> &out) {
-    return from_jcollection(env, obj, out) || from_j(env, (jarray)obj, out);
-}
-template<typename T, std::size_t N>
-static bool from_j(JNIEnv *env, jobject obj, std::array<T, N> &out) {
-    return from_jcollection(env, obj, out) || from_j(env, (jarray)obj, out);
-}
 
 // utility methods that return the object
 template<typename T>

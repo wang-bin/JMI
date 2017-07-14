@@ -7,11 +7,12 @@
 // TODO: cache class, method, field id
 #include <array>
 #include <functional> // std::ref
-#include <jni.h>
-#include <set>
 #include <string>
 #include <type_traits>
+#include <valarray>
 #include <vector>
+#include <jni.h>
+
 namespace jmi {
 
 JavaVM* javaVM(JavaVM *vm = nullptr);
@@ -45,7 +46,7 @@ inline std::string signature_of() { return {'V'};}
 
 template<typename T, std::size_t N>
 inline std::string signature_of(const std::array<T, N>&) {
-    static auto s = std::string({'['}).append({signature_of(T())});
+    static const auto s = std::string({'['}).append({signature_of(T())});
     return s;
 }
 
@@ -53,32 +54,30 @@ template<typename T, if_pointer<T> = true>
 inline std::string signature_of(const T&) { return {signature<jlong>::value};}
 template<typename T, std::size_t N>
 inline std::string signature_of(const T(&)[N]) { 
-    static auto s = std::string({'['}).append({signature_of(T())});
+    static const auto s = std::string({'['}).append({signature_of(T())});
     return s;
 }
 
-// TODO: stl container forward declare only
-// TODO: if_jarray_continuous, is_jcontainer
 template<template<typename, class...> class C, typename T, class... Args> struct is_jarray;
 // exclude std::basic_string etc.
 template<typename T, class... Args> struct is_jarray<std::vector, T, Args...> : public std::true_type {};
-template<typename T, class... Args> struct is_jarray<std::set, T, Args...> : public std::true_type {};
+template<typename T, class... Args> struct is_jarray<std::valarray, T, Args...> : public std::true_type {};
 template<template<typename, class...> class C, typename T, class... Args> using if_jarray = typename std::enable_if<is_jarray<C, T, Args...>::value, bool>::type;
 template<template<typename, class...> class C, typename T, class... Args, if_jarray<C, T, Args...> = true>
 inline std::string signature_of(const C<T, Args...>&) {
-    static std::string s = std::string({'['}).append({signature_of(T())});
+    static const std::string s = std::string({'['}).append({signature_of(T())});
     return s;
 }
 
 // NOTE: define reference_wrapper at last. assume we only use reference_wrapper<...>, no container<reference_wrapper<...>>
 template<typename T>
 inline std::string signature_of(const std::reference_wrapper<T>&) {
-    static std::string s = signature_of(T()); //TODO: no construct
+    static const std::string s = signature_of(T()); //TODO: no construct
     return s;
 }
 template<typename T, std::size_t N>
 inline std::string signature_of(const std::reference_wrapper<T[N]>&) {
-    static std::string s = std::string({'['}).append({signature_of(T())});
+    static const std::string s = std::string({'['}).append({signature_of(T())});
     //return signature_of<T,N>((T[N]){}); //aggregated initialize. can not use declval?
     return s;
 }
@@ -249,7 +248,7 @@ private:
 
     template<typename... Args>
     static std::string args_signature(Args&&... args) {
-        static std::string s("(" + make_sig(std::forward<Args>(args)...) + ")");
+        static const std::string s("(" + make_sig(std::forward<Args>(args)...) + ")");
         return s;
     }
 
@@ -264,11 +263,11 @@ private:
     template<typename T> static jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr);
     template<typename T> static jvalue to_jvalue(T *obj, JNIEnv* env) { return to_jvalue((jlong)obj, env); } // jobject is _jobject*?
     static jvalue to_jvalue(const char* obj, JNIEnv* env);// { return to_jvalue(std::string(obj)); }
-    template<typename T> static jvalue to_jvalue(const std::vector<T> &obj, JNIEnv* env) { return to_jvalue(to_jarray(env, obj), env); }
-    template<typename T> static jvalue to_jvalue(const std::set<T> &obj, JNIEnv* env) { return to_jvalue(to_jarray(env, obj), env);}
-    template<typename T, std::size_t N> static jvalue to_jvalue(const std::array<T, N> &obj, JNIEnv* env) { return to_jvalue(to_jarray(env, obj), env); }
+    template<template<typename,class...> class C, typename T, class... A> static jvalue to_jvalue(const C<T, A...> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
+    template<typename T, std::size_t N> static jvalue to_jvalue(const std::array<T, N> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
     template<typename C> static jvalue to_jvalue(const std::reference_wrapper<C>& c, JNIEnv* env) { return to_jvalue(to_jarray(env, c.get(), true), env); }
     template<typename T, std::size_t N> static jvalue to_jvalue(const std::reference_wrapper<T[N]>& c, JNIEnv* env) { return to_jvalue(to_jarray<T,N>(env, c.get(), true), env); }
+    // T(&)[N]?
 #if 0
     // can not defined as template specialization because to_jvalue(T*, JNIEnv* env) will be choosed
     // FIXME: why clang crashes but gcc is fine? why to_jvalue(const jlong&, JNIEnv* env) works?
@@ -279,44 +278,36 @@ private:
 #endif
     template<typename T>
     static jarray make_jarray(JNIEnv *env, const T &element, size_t size); // element is for getting jobject class
-    template<typename T, std::size_t N>
-    static jarray to_jarray(JNIEnv* env, const T(&c)[N], bool is_ref = false) {
-        static_assert(N > 0, "invalide array size");
+    
+    template<typename T>
+    static jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref = false) {
         if (!env)
             env = getEnv();
         if (!env)
             return nullptr;
         jarray arr = nullptr;
-        arr = make_jarray(env, c[0], N);
+        if (N == 0)
+            arr = make_jarray(env, T(), 0);
+        else
+            arr = make_jarray(env, c0, N);
         if (!is_ref) {
             if (std::is_fundamental<T>::value) {
-                set_jarray(env, arr, 0, N, c[0]);
-            } else {
+                set_jarray(env, arr, 0, N, c0);
+            } else { // string etc. must convert to jobject
                 for (std::size_t i = 0; i < N; ++i)
-                    set_jarray(env, arr, i, 1, c[i]);
+                    set_jarray(env, arr, i, 1, *((&c0)+i));
             }
         }
         return arr;
     }
-    // c++ container to jarray
-    template<typename C>
+    template<typename T, std::size_t N>
+    static jarray to_jarray(JNIEnv* env, const T(&c)[N], bool is_ref = false) {
+        static_assert(N > 0, "invalide array size");
+        return to_jarray(env, c[0], N, is_ref);
+    }
+    template<typename C> // c++ container (vector, valarray, array) to jarray
     static jarray to_jarray(JNIEnv* env, const C &c, bool is_ref = false) {
-        if(!env)
-            env = getEnv();
-        if (!env)
-            return nullptr;
-        jarray arr = nullptr;
-        if (c.empty())
-            arr = make_jarray(env, typename C::value_type(), 0);
-        else
-            arr = make_jarray(env, *c.begin(), c.size()); // c.begin() is for getting jobject class
-        if (!is_ref) {
-            size_t i = 0;
-            // TODO: set once for array, vector etc
-            for (typename C::const_iterator itr = c.begin(); itr != c.end(); ++itr)
-                set_jarray(env, arr, i++, 1, *itr);
-        }
-        return arr;
+        return to_jarray(env, c[0], c.size(), is_ref);
     }
 
     template<typename T>
@@ -330,8 +321,7 @@ private:
         else
             from_jarray(env, v, t, n);
     }
-    template<typename T> static void from_jvalue(JNIEnv* env, const jvalue& v, std::vector<T> &t) { from_jarray(env, v, t.data(), t.size()); }
-    //template<typename T> static void from_jvalue(JNIEnv* env, const jvalue& v, const std::set<T>: &t) { return from_jvalue(env, v, to_jarray(t));}
+    template<template<typename,class...> class C, typename T, class... A> static void from_jvalue(JNIEnv* env, const jvalue& v, C<T, A...> &t) { from_jarray(env, v, &t[0], t.size()); }
     template<typename T, std::size_t N> static void from_jvalue(JNIEnv* env, const jvalue& v, std::array<T, N> &t) { return from_jarray(env, v, t.data(), N); }
     //template<typename T, std::size_t N> static void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { return from_jarray(env, v, t, N); }
 
