@@ -83,12 +83,14 @@ JNIEnv *getEnv() {
 
 std::string to_string(jstring s, JNIEnv* env)
 {
+    if (!s)
+        return string();
     if (!env)
         env = getEnv();
     const char* cs = env->GetStringUTFChars(s, 0);
     if (!cs)
-        return std::string();
-    std::string ss(cs);
+        return string();
+    string ss(cs);
     env->ReleaseStringUTFChars(s, cs);
     env->DeleteLocalRef(s);
     return ss;
@@ -193,14 +195,12 @@ void object::reset(JNIEnv *env) {
     error_.clear();
     if (!env)
         env = getEnv();
-    if (class_) {
+    if (class_)
         env->DeleteGlobalRef(class_);
-        class_ = nullptr;
-    }
-    if (instance_) {
+    if (instance_)
         env->DeleteGlobalRef(instance_);
-        instance_ = nullptr;
-    }
+    class_ = nullptr;
+    instance_ = nullptr;
 }
 
 object& object::set_error(const std::string& err) 
@@ -216,24 +216,13 @@ static bool from_j(JNIEnv *env, jobject obj, T &out);
 template<typename T>
 static T from_j(JNIEnv *env, jobject obj) {
     T out;
-    bool result = from_j(env, obj, out);
-    assert(result);
+    from_j(env, obj, out);
     return out;
 }
 template<>
 bool from_j(JNIEnv *env, jobject obj, std::string &out) {
-    if (!obj) {
-        out = "";
-        return true;
-    }
-    jstring jstr = (jstring)obj;
-    const char *chars = env->GetStringUTFChars(jstr, nullptr);
-    if (!chars)
-        return false;
-    out = chars;
-    env->ReleaseStringUTFChars(jstr, chars);
-    env->DeleteLocalRef(jstr);
-    return true;
+    out = to_string(static_cast<jstring>(obj), env);
+    return !out.empty();
 }
 template<>
 bool from_j(JNIEnv *env, jobject obj, object &out) {
