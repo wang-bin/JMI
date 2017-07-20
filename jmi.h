@@ -15,7 +15,8 @@
 
 namespace jmi {
 
-JavaVM* javaVM(JavaVM *vm = nullptr);
+// set JavaVM to vm if not null. return previous JavaVM
+JavaVM* javaVM(JavaVM *vm = nullptr, jint version = JNI_VERSION_1_4);
 JNIEnv *getEnv();
 std::string to_string(jstring s, JNIEnv* env = nullptr);
 jstring from_string(const std::string& s, JNIEnv* env = nullptr);
@@ -302,7 +303,6 @@ private:
     }
     template<typename T, std::size_t N>
     static jarray to_jarray(JNIEnv* env, const T(&c)[N], bool is_ref = false) {
-        static_assert(N > 0, "invalide array size");
         return to_jarray(env, c[0], N, is_ref);
     }
     template<typename C> // c++ container (vector, valarray, array) to jarray

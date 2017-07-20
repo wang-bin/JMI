@@ -6,8 +6,8 @@
 #include "jmi.h"
 #include <cassert>
 #include <algorithm>
-#include <pthread.h>
 #include <iostream>
+#include <pthread.h>
 #if defined(__ANDROID__) || defined(ANDROID)
 #define OS_ANDROID
 #include <android/log.h>
@@ -16,10 +16,13 @@
 using namespace std;
 namespace jmi {
 
-JavaVM* javaVM(JavaVM *vm) {
+static jint jni_ver = JNI_VERSION_1_4;
+
+JavaVM* javaVM(JavaVM *vm, jint v) {
     static JavaVM *jvm_ = nullptr;
     if (vm)
         jvm_ = vm;
+    jni_ver = v;
     return jvm_;
 }
 
@@ -30,7 +33,7 @@ JNIEnv *getEnv() {
         return nullptr;
     }
     JNIEnv* env = nullptr;
-    int status = javaVM()->GetEnv((void**)&env, JNI_VERSION_1_4);
+    int status = javaVM()->GetEnv((void**)&env, jni_ver); // TODO: version
     if (JNI_OK == status)
         return env;
     if (status != JNI_EDETACHED) {
@@ -49,7 +52,7 @@ JNIEnv *getEnv() {
 
         pthread_key_create(&key_, [](void*){
             JNIEnv* env = nullptr;
-            if (javaVM()->GetEnv((void**)&env, JNI_VERSION_1_4) == JNI_EDETACHED)
+            if (javaVM()->GetEnv((void**)&env, jni_ver) == JNI_EDETACHED)
                 return; //
             int status = javaVM()->DetachCurrentThread();
             if (status != JNI_OK)
@@ -59,16 +62,22 @@ JNIEnv *getEnv() {
     env = (JNIEnv*)pthread_getspecific(key_);
     if (env)
         cerr << "TLS has a JNIEnv* but not attatched. Maybe detatched by user." << endl;
+    JavaVMAttachArgs aa{};
+    aa.version = jni_ver;
 #ifdef OS_ANDROID
-    status = javaVM()->AttachCurrentThread(&env, nullptr); //JavaVMAttachArgs
+    status = javaVM()->AttachCurrentThread(&env, &aa);
 #else
-    status = javaVM()->AttachCurrentThread((void**)&env, nullptr);
+    status = javaVM()->AttachCurrentThread((void**)&env, &aa);
 #endif
     if (status != JNI_OK) {
         cerr << "AttachCurrentThread failed: " << status << endl;
         return nullptr;
     }
-    pthread_setspecific(key_, env);
+    if (pthread_setspecific(key_, env) != 0) {
+        cerr << "failed to set tls JNIEnv data" << endl;
+        javaVM()->DetachCurrentThread();
+        return nullptr;
+    }
     return env;
 }
 
@@ -194,7 +203,8 @@ void object::reset(JNIEnv *env) {
     }
 }
 
-object& object::set_error(const std::string& err) {
+object& object::set_error(const std::string& err) 
+{
     error_ = err;
     return *this;
 }
