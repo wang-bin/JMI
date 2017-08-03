@@ -1,6 +1,8 @@
+#include <valarray>
 #include "jmi.h"
 #include <iostream>
 #include <type_traits>
+#include <vector>
 
 using namespace std;
 
@@ -24,7 +26,7 @@ int main(int argc, char *argv[])
     cout << jmi::signature_of(jmi::object()) << endl;
     cout << jmi::signature_of(1.2f) << endl;
     cout << jmi::signature_of(std::string()) << endl;
-    std::vector<float> f;
+    std::valarray<float> f;
     cout << jmi::signature_of(&f) << endl;
     cout << jmi::signature_of(f) << endl;
     std::vector<std::string> s;
@@ -35,6 +37,7 @@ int main(int argc, char *argv[])
     cout << jmi::signature_of(a) << endl;
     float mat4[16];
     cout << jmi::signature_of(mat4) << endl;
+    cout << "ref(mat4): " << jmi::signature_of(std::ref(mat4)) << endl;
     //std::unordered_map<float, string> m;
     //cout << jmi::signature_of(m);
 }
