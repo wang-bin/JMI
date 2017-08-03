@@ -168,7 +168,7 @@ public:
     template<typename... Args>
     void call_static(const std::string &name, Args&&... args) {
         static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
-        call_static_with_methodID<void>(name.c_str(), std::forward<Args>(args)...);
+        call_static_with_methodID<void>(nullptr, s, name.c_str(), std::forward<Args>(args)...);
     }
     /* with MethodTag we can avoid calling GetStaticMethodID() in every call_static()
         struct JmyStaticMethod : jmi::method_trait { static const char* name() { return "myStaticMethod";} };
@@ -176,15 +176,15 @@ public:
     */
     template<typename T, class MethodTag, typename... Args, typename std::enable_if<std::is_base_of<method_trait, MethodTag>::value, bool>::type = true>
     T call_static(Args&&... args) {
-        static const auto signature = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
         static jmethodID mid = nullptr;
-        return call_static_with_methodID<T>(&mid, MethodTag::name(), std::forward<Args>(args)...);
+        return call_static_with_methodID<T>(&mid, s, MethodTag::name(), std::forward<Args>(args)...);
     }
     template<class MethodTag, typename... Args, typename std::enable_if<std::is_base_of<method_trait, MethodTag>::value, bool>::type = true>
     void call_static(Args&&... args) {
         static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
         static jmethodID mid = nullptr;
-        return call_static_with_methodID<void>(&mid, MethodTag::name(), std::forward<Args>(args)...);
+        return call_static_with_methodID<void>(&mid, s, MethodTag::name(), std::forward<Args>(args)...);
     }
 
 private:
