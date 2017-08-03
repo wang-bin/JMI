@@ -4,7 +4,7 @@
  * MIT License
  */
 #pragma once
-// TODO: cache class, method, field id
+// TODO: cache class. throw exceptions to java
 #include <array>
 #include <functional> // std::ref
 #include <string>
@@ -132,77 +132,60 @@ public:
         return object(cpath, cid, obj, env);
     }
 
-    // use call_with with signature for method whose return type is object
     template<typename T, typename... Args>
-    T call(const std::string &name, Args&&... args) {
-        static const std::string s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
-        return call_with<T>(name, s, std::forward<Args>(args)...);
+    T call(const std::string &methodName, Args&&... args) {
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+        return call_with_methodID<T>(nullptr, s, methodName.c_str(), std::forward<Args>(args)...);
     }
-    template<typename T, typename... Args>
-    T call_with(const std::string &name, const std::string &signature, Args&& ...args) {
-        using namespace std;
-        error_.clear();
-        const jclass cid = get_class();
-        if (!cid)
-            return T();
-        const jobject oid = instance_;
-        if (!oid) {
-            set_error("invalid object instance");
-            return T();
-        }
-        JNIEnv *env = getEnv();
-        auto checker = call_on_exit([=]{
-            if (handle_exception(env))
-                set_error(std::string("Failed to call method '") + name + "' with signature '" + signature + "'.");
-        });
-        const jmethodID mid = env->GetMethodID(cid, name.c_str(), signature.c_str());
-        if (!mid || env->ExceptionCheck())
-            return T();
-        return call_method_set_ref<T>(env, oid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin()), std::forward<Args>(args)...);
-    }
-
     template<typename... Args>
+    void call(const std::string &methodName, Args&&... args) {
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
+        call_with_methodID<void>(nullptr, s, methodName.c_str(), std::forward<Args>(args)...);
+    }
+    /* with MethodTag we can avoid calling GetMethodID() in every call()
+        struct MyMethod { constexpr static const char* name = "MyMethod"; }; // can not be a local class
+        ...
+        return call<T, MyMethod>(args...);
+    */
+    template<typename T, class MethodTag, typename... Args, typename std::enable_if<!!MethodTag::name, bool>::type = true>
+    T call(Args&&... args) {
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+        static jmethodID mid = nullptr;
+        return call_with_methodID<T>(&mid, s, MethodTag::name, std::forward<Args>(args)...);
+    }
+    template<class MethodTag, typename... Args, typename std::enable_if<!!MethodTag::name, bool>::type = true>
     void call(const std::string &name, Args&&... args) {
-        static const std::string s = args_signature(std::forward<Args>(args)...).append(signature_of());
-        call_with(name, s, std::forward<Args>(args)...);
-    }
-    template<typename... Args>
-    void call_with(const std::string &name, const std::string &signature, Args&&... args) {
-        return call_with<void>(name, signature, std::forward<Args>(args)...);
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
+        static jmethodID mid = nullptr;
+        call_with_methodID<void>(&mid, s, MethodTag::name, std::forward<Args>(args)...);
     }
 
     template<typename T, typename... Args>
     T call_static(const std::string &name, Args&&... args) {
-        static const std::string s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
-        return call_static_with<T>(name, s, std::forward<Args>(args)...);
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+        return call_static_with_methodID<T>(nullptr, s, name.c_str(), std::forward<Args>(args)...);
     }
-
-    template<typename T, typename... Args>
-    T call_static_with(const std::string &name, const std::string &signature, Args&&... args) {
-        using namespace std;
-        error_.clear();
-        const jclass cid = get_class();
-        if (!cid)
-            return T();
-        JNIEnv *env = getEnv();
-        auto checker = call_on_exit([=]{
-            if (handle_exception(env))
-                set_error(std::string("Failed to call static method '") + name + "'' with signature '" + signature + "'.");
-        });
-        const jmethodID mid = env->GetStaticMethodID(cid, name.c_str(), signature.c_str());
-        if (!mid || env->ExceptionCheck())
-            return T();
-        return call_static_method_set_ref<T>(env, cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin()), std::forward<Args>(args)...);
-    }
-
     template<typename... Args>
     void call_static(const std::string &name, Args&&... args) {
-        static const std::string s = args_signature(std::forward<Args>(args)...).append(signature_of());
-        call_static_with(name, s, std::forward<Args>(args)...);
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
+        call_static_with_methodID<void>(name.c_str(), std::forward<Args>(args)...);
     }
-    template<typename... Args>
-    void call_static_with(const std::string &name, const std::string &signature, Args&&... args) {
-        return call_static_with<void>(name, signature, std::forward<Args>(args)...);
+    /* with MethodTag we can avoid calling GetStaticMethodID() in every call_static()
+        struct MyStaticMethod { constexpr static const char* name = "MyStaticMethod"; }; // can not be a local class
+        ...
+        return call_static<T, MyStaticMethod>(args...);
+    */
+    template<typename T, class MethodTag, typename... Args, typename std::enable_if<MethodTag::name, bool>::type = true>
+    T call_static(Args&&... args) {
+        static const auto signature = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+        static jmethodID mid = nullptr;
+        return call_static_with_methodID<T>(&mid, MethodTag::name, std::forward<Args>(args)...);
+    }
+    template<class MethodTag, typename... Args, typename std::enable_if<MethodTag::name, bool>::type = true>
+    void call_static(Args&&... args) {
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
+        static jmethodID mid = nullptr;
+        return call_static_with_methodID<void>(&mid, MethodTag::name, std::forward<Args>(args)...);
     }
 
 private:
@@ -376,6 +359,61 @@ private:
     }
     template<typename T>
     T call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const;
+
+    template<typename T, typename... Args>
+    T call_with_methodID(jmethodID* pmid, const std::string& signature, const char* name, Args&&... args) {
+        using namespace std;
+        error_.clear();
+        const jclass cid = get_class();
+        if (!cid)
+            return T();
+        const jobject oid = instance_;
+        if (!oid) {
+            set_error("invalid object instance");
+            return T();
+        }
+        JNIEnv *env = getEnv();
+        auto checker = call_on_exit([=]{
+            if (handle_exception(env))
+                set_error(std::string("Failed to call method '") + name + "' with signature '" + signature + "'.");
+        });
+        jmethodID mid = nullptr;
+        if (pmid)
+            mid = *pmid;
+        if (!mid) {
+            mid = env->GetMethodID(cid, name, signature.c_str());
+            if (pmid)
+                *pmid = mid;
+        }
+        if (!mid || env->ExceptionCheck())
+            return T();
+        return call_method_set_ref<T>(env, oid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin()), std::forward<Args>(args)...);
+    }
+
+    template<typename T, typename... Args>
+    T call_static_with_methodID(jmethodID* pmid, const std::string& signature, const char* name, Args&&... args) {
+        using namespace std;
+        error_.clear();
+        const jclass cid = get_class();
+        if (!cid)
+            return T();
+        JNIEnv *env = getEnv();
+        auto checker = call_on_exit([=]{
+            if (handle_exception(env))
+                set_error(std::string("Failed to call static method '") + name + "'' with signature '" + signature + "'.");
+        });
+        jmethodID mid = nullptr;
+        if (pmid)
+            mid = *pmid;
+        if (!mid) {
+            mid = env->GetStaticMethodID(cid, name, signature.c_str());
+            if (pmid)
+                *pmid = mid;
+        }
+        if (!mid || env->ExceptionCheck())
+            return T();
+        return call_static_method_set_ref<T>(env, cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin()), std::forward<Args>(args)...);
+    }
 };
 
 template<>
