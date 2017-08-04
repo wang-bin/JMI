@@ -24,6 +24,31 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	jmi::object o;
 	const jbyte cs[] = {'1', '2', '3'};
     std::array<jbyte, 3> cxxa{'a', 'b', 'c'};
+	struct JString : jmi::ClassTag {
+		static std::string name() { return jmi::signature_of(std::string());}
+	};
+	jmi::JObject<JString> jstr0;
+	if (!jstr0.create(cxxa)) {
+		cout << __LINE__<< " !!!!create error: " << jstr0.error() << endl;
+	}
+	auto jstr = std::move(jstr0);
+	auto js2 = jstr;
+	cout << "JString len: " << jstr.call<jint>("length") << jstr.error() << endl;
+	cout << jstr.signature() << endl;
+	jstr.reset();
+	jstr.create("abcd");
+	cout << "JString len: " << jstr.call<jint>("length") << jstr.error() << endl;
+    cout << "JString[2]: " << (char)jstr.call<jchar>("charAt", 2) << jstr.error() << std::endl;
+	cout << "JString[2]: " << (char)jstr.call<jchar>("charAt", 2) << jstr.error() << std::endl;
+	//jmethodID mid= env->GetMethodID(js.get_class(),"charAt", "(I)C");
+	//std::cout << "[2]:" <<(char)env->CallCharMethod(js.instance(), mid, 2) << endl;
+    cout << "valueOf: " << jstr.callStatic<std::string>("valueOf", 123) << jstr.error() << std::endl;
+    cout << "indexOf c: " << jstr.call<jint>("indexOf", std::string("c"), 1) << jstr.error() << std::endl;
+	struct IndexOf : jmi::MethodTag { static const char* name() {return "indexOf";} };
+    cout << "JString.indexOf c: " << jstr.call<jint,IndexOf>(std::string("c"), 1) << jstr.error() << std::endl;
+    cout << "JString.indexOf c: " << jstr.call<jint,IndexOf>(std::string("c"), 1) << jstr.error() << std::endl;
+    cout << "JString.indexOf c: " << jstr.call<jint,IndexOf>(std::string("c"), 1) << jstr.error() << std::endl;
+
     jmi::object array_j = jmi::object::create(jmi::signature_of(std::string()), cxxa);//std::string("abc"));
 	cout << array_j.signature() << endl;
     //jbyte ca[] = {'a', 'b', 'c', 'd'}; // why crash? why const crash?
@@ -41,11 +66,7 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	//std::cout << "[2]:" <<(char)env->CallCharMethod(js.instance(), mid, 2) << endl;
     cout << "valueOf: " << js.call_static<std::string>("valueOf", 123) << js.error() << std::endl;
     cout << "indexOf c: " << js.call<jint>("indexOf", std::string("c"), 1) << js.error() << std::endl;
-#if 0
-	struct Tag_indexOf : jmi::method_trait { static const char* name() {return "indexOf";} };
-    cout << "indexOf c: " << js.call<jint,Tag_indexOf>(std::string("c"), 1) << js.error() << std::endl;
-    cout << "indexOf c: " << js.call<jint,Tag_indexOf>(std::string("c"), 1) << js.error() << std::endl;
-#endif
+
 	jmi::object st = jmi::object::create("android/graphics/SurfaceTexture", 0);
 
     if (!st.error().empty())
