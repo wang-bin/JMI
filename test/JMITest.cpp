@@ -40,11 +40,12 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	//jmethodID mid= env->GetMethodID(js.get_class(),"charAt", "(I)C");
 	//std::cout << "[2]:" <<(char)env->CallCharMethod(js.instance(), mid, 2) << endl;
     cout << "valueOf: " << js.call_static<std::string>("valueOf", 123) << js.error() << std::endl;
+    cout << "indexOf c: " << js.call<jint>("indexOf", std::string("c"), 1) << js.error() << std::endl;
+#if 0
 	struct Tag_indexOf : jmi::method_trait { static const char* name() {return "indexOf";} };
-
     cout << "indexOf c: " << js.call<jint,Tag_indexOf>(std::string("c"), 1) << js.error() << std::endl;
     cout << "indexOf c: " << js.call<jint,Tag_indexOf>(std::string("c"), 1) << js.error() << std::endl;
-
+#endif
 	jmi::object st = jmi::object::create("android/graphics/SurfaceTexture", 0);
 
     if (!st.error().empty())

@@ -84,7 +84,7 @@ inline std::string signature_of(const std::reference_wrapper<T[N]>&) {
     return s;
 }
 
-
+// TODO: object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
 class object {
 public:
     object(const std::string &class_path, jclass class_id = nullptr, jobject jobj = nullptr, JNIEnv* env = nullptr);
@@ -143,6 +143,7 @@ public:
         static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
         call_with_methodID<void>(nullptr, s, methodName.c_str(), std::forward<Args>(args)...);
     }
+#if 0
     /* with MethodTag we can avoid calling GetMethodID() in every call()
         struct JmyMethod : jmi::method_trait { static const char* name() { return "myMethod";} };
         return call<T, JmyMethod>(args...);
@@ -159,7 +160,7 @@ public:
         static jmethodID mid = nullptr;
         call_with_methodID<void>(&mid, s, MethodTag::name(), std::forward<Args>(args)...);
     }
-
+#endif
     template<typename T, typename... Args>
     T call_static(const std::string &name, Args&&... args) {
         static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
@@ -170,6 +171,7 @@ public:
         static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
         call_static_with_methodID<void>(nullptr, s, name.c_str(), std::forward<Args>(args)...);
     }
+#if 0
     /* with MethodTag we can avoid calling GetStaticMethodID() in every call_static()
         struct JmyStaticMethod : jmi::method_trait { static const char* name() { return "myStaticMethod";} };
         return call_static<T, JmyStaticMethod>(args...);
@@ -186,7 +188,7 @@ public:
         static jmethodID mid = nullptr;
         return call_static_with_methodID<void>(&mid, s, MethodTag::name(), std::forward<Args>(args)...);
     }
-
+#endif
 private:
     jobject instance_ = nullptr;
     jclass class_ = nullptr;
