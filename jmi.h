@@ -3,7 +3,7 @@
  * Copyright (C) 2016-2017 Wang Bin - wbsecg1@gmail.com
  * MIT License
  */
-// TODO: field, struct signature<JObject> without function and function parameter
+// TODO: field, struct signature<JObject> without function and function parameter, hidden inline
 #pragma once
 #include <algorithm>
 #include <array>
@@ -21,10 +21,14 @@ JavaVM* javaVM(JavaVM *vm = nullptr, jint version = JNI_VERSION_1_4);
 JNIEnv *getEnv();
 std::string to_string(jstring s, JNIEnv* env = nullptr);
 jstring from_string(const std::string& s, JNIEnv* env = nullptr);
-
+ 
 struct ClassTag {}; // used by JObject<Tag>. subclasses must define static const std::string() name(), with or without "L ;" around
 struct MethodTag {}; // used by call() and call_static(). subclasses must define static const char* name();
-template<class CTag, typename std::enable_if<std::is_base_of<ClassTag, CTag>::value, bool>::type> class JObject;
+template<class Tag>
+using if_ClassTag = typename std::enable_if<std::is_base_of<ClassTag, Tag>::value, bool>::type;
+template<class Tag>
+using if_MethodTag = typename std::enable_if<std::is_base_of<MethodTag, Tag>::value, bool>::type;
+template<class CTag, if_ClassTag<CTag>> class JObject;
 
 template<typename T> struct signature;
 template<> struct signature<jboolean> { static const char value = 'Z';};
@@ -89,6 +93,79 @@ inline std::string signature_of(const std::reference_wrapper<T[N]>&) {
     return s;
 }
 
+// object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
+template<class CTag, if_ClassTag<CTag> = true>
+class JObject
+{
+public:
+    static const std::string className() {
+        static std::string s(normalizeClassName(CTag::name()));
+        return s;
+    }
+    static const std::string signature() {return "L" + className() + ";";}
+
+    JObject() {} // TODO: from jobject
+    ~JObject() { reset(); }
+    JObject(const JObject &other) { *this = other; }
+    JObject &operator=(const JObject &other);
+    JObject(JObject &&other) = default;
+    JObject &operator=(JObject &&other) = default;
+
+    operator jobject() const { return oid_;}
+    operator jclass() const { return classId();} // static?
+    jobject id() const { return oid_; }
+    explicit operator bool() const { return !!oid_;}
+    std::string error() const {return error_;}
+
+    void reset(JNIEnv *env = nullptr);
+
+    template<typename... Args>
+    bool create(Args&&... args);
+
+    /* with MethodTag we can avoid calling GetMethodID() in every call()
+        struct MyMethod : jmi::MethodTag { static const char* name() { return "myMethod";} };
+        return call<T, MyMethod>(args...);
+    */
+    template<typename T, class MTag, typename... Args, if_MethodTag<MTag> = true>
+    inline T call(Args&&... args);
+    template<class MTag, typename... Args, if_MethodTag<MTag> = true>
+    inline void call(Args&&... args);
+    /* with MethodTag we can avoid calling GetStaticMethodID() in every call_static()
+        struct MyStaticMethod : jmi::MethodTag { static const char* name() { return "myStaticMethod";} };
+        JObject<CT>::call_static<R, MyStaticMethod>(args...);
+    */
+    template<typename T, class MTag, typename... Args, if_MethodTag<MTag> = true>
+    static T callStatic(Args&&... args);
+    template<class MTag, typename... Args, if_MethodTag<MTag> = true>
+    static void callStatic(Args&&... args);
+    // the following call()/call_static() will always invoke GetMethodID()/GetStaticMethodID()
+    template<typename T, typename... Args>
+    T call(const std::string &methodName, Args&&... args);
+    template<typename... Args>
+    void call(const std::string &methodName, Args&&... args);
+    template<typename T, typename... Args>
+    static T callStatic(const std::string &name, Args&&... args);
+    template<typename... Args>
+    static void callStatic(const std::string &name, Args&&... args);
+private:
+    static jclass& classId(JNIEnv* env = nullptr);
+    void setError(const std::string& s) {error_ = s; }
+    static std::string normalizeClassName(std::string&& name) {
+        std::string s = std::forward<std::string>(name);
+        if (s[0] == 'L' && s.back() == ';')
+            s = s.substr(1, s.size()-2);
+        replace(s.begin(), s.end(), '.', '/');
+        return s;
+    }
+
+    jobject oid_ = nullptr;
+    std::string error_;
+};
+
+template<class CTag>
+inline std::string signature_of(const JObject<CTag>& t) { return t.signature();}
+
+
 namespace detail {
 using namespace std;
     static inline bool handle_exception(JNIEnv* env) { //'static' function 'handle_exception' declared in header file should be declared 'static inline' [-Wunneeded-internal-declaration]
@@ -149,26 +226,7 @@ using namespace std;
     void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const JObject<CTag, true> &elm);
 
     template<typename T>
-    jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref = false) {
-        if (!env)
-            env = getEnv();
-        if (!env)
-            return nullptr;
-        jarray arr = nullptr;
-        if (N == 0)
-            arr = make_jarray(env, T(), 0);
-        else
-            arr = make_jarray(env, c0, N);
-        if (!is_ref) {
-            if (std::is_fundamental<T>::value) {
-                set_jarray(env, arr, 0, N, c0);
-            } else { // string etc. must convert to jobject
-                for (std::size_t i = 0; i < N; ++i)
-                    set_jarray(env, arr, i, 1, *((&c0)+i));
-            }
-        }
-        return arr;
-    }
+    jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref = false);
     template<typename T, std::size_t N>
     jarray to_jarray(JNIEnv* env, const T(&c)[N], bool is_ref = false) {
         return to_jarray(env, c[0], N, is_ref);
@@ -324,178 +382,168 @@ using namespace std;
 
 } // namespace detail
 
-// object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
-template<class CTag, typename std::enable_if<std::is_base_of<ClassTag, CTag>::value, bool>::type = true>
-class JObject
-{
-public:
-    static const std::string className() {
-        static std::string s(normalizeClassName(CTag::name()));
-        return s;
-    }
-    static const std::string signature() {return "L" + className() + ";";}
-
-    JObject() {} // TODO: from jobject
-    ~JObject() { reset(); }
-    JObject(const JObject &other) { *this = other; }
-    JObject &operator=(const JObject &other) {
-        if (this == &other)
-            return *this;
-        JNIEnv *env = getEnv();
-        reset(env);
-        if (other.id())
-            oid_ = env->NewGlobalRef(other.id());
-        setError(other.error());
+template<class CTag, if_ClassTag<CTag> V>
+JObject<CTag, V>& JObject<CTag, V>::operator=(const JObject &other) {
+    if (this == &other)
         return *this;
+    JNIEnv *env = getEnv();
+    reset(env);
+    if (other.id())
+        oid_ = env->NewGlobalRef(other.id());
+    setError(other.error());
+    return *this;
+}
+
+template<class CTag, if_ClassTag<CTag> V>
+void JObject<CTag, V>::reset(JNIEnv *env) {
+    error_.clear();
+    if (!env)
+        env = getEnv();
+    if (!env)
+        return;
+    if (oid_)
+        env->DeleteGlobalRef(oid_);
+    oid_ = nullptr;
+}
+
+template<class CTag, if_ClassTag<CTag> V>
+template<typename... Args>
+bool JObject<CTag, V>::create(Args&&... args) {
+    using namespace std;
+    using namespace detail;
+    JNIEnv* env = nullptr; // FIXME: why build error if let env be the last parameter of create()?
+    if (!env) {
+        env = getEnv();
+        if (!env) {
+            setError("No JNIEnv when creating class '" + className() + "'");
+            return false;
+        }
     }
-    JObject(JObject &&other) = default;
-    JObject &operator=(JObject &&other) = default;
-
-    operator jobject() const { return oid_;}
-    operator jclass() const { return classId();} // static?
-    jobject id() const { return oid_; }
-    explicit operator bool() const { return !!oid_;}
-    std::string error() const {return error_;}
-
-    void reset(JNIEnv *env = nullptr) {
-        error_.clear();
-        if (!env)
-            env = getEnv();
-        if (!env)
-            return;
-        if (oid_)
-            env->DeleteGlobalRef(oid_);
-        oid_ = nullptr;
+    const jclass cid = classId();
+    if (!cid) {
+        setError("Failed to find class '" + className() + "'");
+        return false;
     }
+    auto checker = detail::call_on_exit([=]{ handle_exception(env); });
+    static const string s(args_signature(forward<Args>(args)...).append(signature_of())); // void
+    static const jmethodID mid = env->GetMethodID(cid, "<init>", s.c_str()); // can be static because class id, signature and arguments combination is unique
+    if (!mid) {
+        setError(string("Failed to find constructor of '" + className() + "' with signature '" + s + "'."));
+        return false;
+    }
+    const jobject oid = env->NewObjectA(cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin())); // ptr0(jv) crash
+    if (!oid) {
+        setError(string("Failed to call constructor '" + className() + "' with signature '" + s + "'."));
+        return false;
+    }
+    oid_ = env->NewGlobalRef(oid);
+    return true;
+}
 
-    template<typename... Args>
-    bool create(Args&&... args) {
-        using namespace std;
-        using namespace detail;
-        JNIEnv* env = nullptr; // FIXME: why build error if let env be the last parameter of create()?
+template<class CTag, if_ClassTag<CTag> V>
+template<typename T, class MTag, typename... Args, if_MethodTag<MTag>>
+T JObject<CTag, V>::call(Args&&... args) {
+    using namespace detail;
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+    static jmethodID mid = nullptr;
+    return call_with_methodID<T>(oid_, classId(), &mid, [this](std::string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
+}
+template<class CTag, if_ClassTag<CTag> V>
+template<class MTag, typename... Args, if_MethodTag<MTag>>
+void JObject<CTag, V>::call(Args&&... args) {
+    using namespace detail;
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
+    static jmethodID mid = nullptr;
+    call_with_methodID<void>(oid_, classId(), &mid, [this](std::string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
+}
+template<class CTag, if_ClassTag<CTag> V>
+template<typename T, class MTag, typename... Args, if_MethodTag<MTag>>
+T JObject<CTag, V>::callStatic(Args&&... args) {
+    using namespace detail;
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+    static jmethodID mid = nullptr;
+    return call_static_with_methodID<T>(classId(), &mid, nullptr, s, MTag::name(), std::forward<Args>(args)...);
+}
+template<class CTag, if_ClassTag<CTag> V>
+template<class MTag, typename... Args, if_MethodTag<MTag>>
+void JObject<CTag, V>::callStatic(Args&&... args) {
+    using namespace detail;
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
+    static jmethodID mid = nullptr;
+    return call_static_with_methodID<void>(classId(), &mid, nullptr, s, MTag::name(), std::forward<Args>(args)...);
+}
+
+template<class CTag, if_ClassTag<CTag> V>
+template<typename T, typename... Args>
+T JObject<CTag, V>::call(const std::string &methodName, Args&&... args) {
+    using namespace detail;
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+    return call_with_methodID<T>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
+}
+template<class CTag, if_ClassTag<CTag> V>
+template<typename... Args>
+void JObject<CTag, V>::call(const std::string &methodName, Args&&... args) {
+    using namespace detail;
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
+    call_with_methodID<void>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
+}
+template<class CTag, if_ClassTag<CTag> V>
+template<typename T, typename... Args>
+T JObject<CTag, V>::callStatic(const std::string &name, Args&&... args) {
+    using namespace detail;
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+    return call_static_with_methodID<T>(classId(), nullptr, nullptr, s, name.c_str(), std::forward<Args>(args)...);
+}
+template<class CTag, if_ClassTag<CTag> V>
+template<typename... Args>
+void JObject<CTag, V>::callStatic(const std::string &name, Args&&... args) {
+    using namespace detail;
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
+    call_static_with_methodID<void>(classId(), nullptr, nullptr, s, name.c_str(), std::forward<Args>(args)...);
+}
+
+template<class CTag, if_ClassTag<CTag> V>
+jclass& JObject<CTag, V>::classId(JNIEnv* env) {
+    static jclass c = nullptr;
+    if (!c) {
         if (!env) {
             env = getEnv();
-            if (!env) {
-                setError("No JNIEnv when creating class '" + className() + "'");
-                return false;
-            }
+            if (!env)
+                return c;
         }
-        const jclass cid = classId();
-        if (!cid) {
-            setError("Failed to find class '" + className() + "'");
-            return false;
+        const jclass cid = (jclass)env->FindClass(className().c_str());
+        if (cid) {
+            c = (jclass)env->NewGlobalRef(cid); // cache per (c++/java)class class id
+            env->DeleteLocalRef(cid); // can not use c
         }
-        auto checker = detail::call_on_exit([=]{ handle_exception(env); });
-        static const string s(args_signature(forward<Args>(args)...).append(signature_of())); // void
-        static const jmethodID mid = env->GetMethodID(cid, "<init>", s.c_str()); // can be static because class id, signature and arguments combination is unique
-        if (!mid) {
-            setError(string("Failed to find constructor of '" + className() + "' with signature '" + s + "'."));
-            return false;
-        }
-        const jobject oid = env->NewObjectA(cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin())); // ptr0(jv) crash
-        if (!oid) {
-            setError(string("Failed to call constructor '" + className() + "' with signature '" + s + "'."));
-            return false;
-        }
-        oid_ = env->NewGlobalRef(oid);
-        return true;
     }
+    return c;
+}
 
-    /* with MethodTag we can avoid calling GetMethodID() in every call()
-        struct MyMethod : jmi::MethodTag { static const char* name() { return "myMethod";} };
-        return call<T, MyMethod>(args...);
-    */
-    template<typename T, class MTag, typename... Args, typename std::enable_if<std::is_base_of<MethodTag, MTag>::value, bool>::type = true>
-    T call(Args&&... args) {
-        using namespace detail;
-        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
-        static jmethodID mid = nullptr;
-        return call_with_methodID<T>(oid_, classId(), &mid, [this](std::string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
-    }
-    template<class MTag, typename... Args, typename std::enable_if<std::is_base_of<MethodTag, MTag>::value, bool>::type = true>
-    void call(Args&&... args) {
-        using namespace detail;
-        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
-        static jmethodID mid = nullptr;
-        call_with_methodID<void>(oid_, classId(), &mid, [this](std::string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
-    }
-    /* with MethodTag we can avoid calling GetStaticMethodID() in every call_static()
-        struct MyStaticMethod : jmi::MethodTag { static const char* name() { return "myStaticMethod";} };
-        JObject<CT>::call_static<R, MyStaticMethod>(args...);
-    */
-    template<typename T, class MTag, typename... Args, typename std::enable_if<std::is_base_of<MethodTag, MTag>::value, bool>::type = true>
-    static T callStatic(Args&&... args) {
-        using namespace detail;
-        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
-        static jmethodID mid = nullptr;
-        return call_static_with_methodID<T>(classId(), &mid, nullptr, s, MTag::name(), std::forward<Args>(args)...);
-    }
-    template<class MTag, typename... Args, typename std::enable_if<std::is_base_of<MethodTag, MTag>::value, bool>::type = true>
-    static void callStatic(Args&&... args) {
-        using namespace detail;
-        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
-        static jmethodID mid = nullptr;
-        return call_static_with_methodID<void>(classId(), &mid, nullptr, s, MTag::name(), std::forward<Args>(args)...);
-    }
-
-    // the following call()/call_static() will always invoke GetMethodID()/GetStaticMethodID()
-    template<typename T, typename... Args>
-    T call(const std::string &methodName, Args&&... args) {
-        using namespace detail;
-        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
-        return call_with_methodID<T>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
-    }
-    template<typename... Args>
-    void call(const std::string &methodName, Args&&... args) {
-        using namespace detail;
-        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
-        call_with_methodID<void>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
-    }
-    template<typename T, typename... Args>
-    static T callStatic(const std::string &name, Args&&... args) {
-        using namespace detail;
-        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
-        return call_static_with_methodID<T>(classId(), nullptr, nullptr, s, name.c_str(), std::forward<Args>(args)...);
-    }
-    template<typename... Args>
-    static void callStatic(const std::string &name, Args&&... args) {
-        using namespace detail;
-        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
-        call_static_with_methodID<void>(classId(), nullptr, nullptr, s, name.c_str(), std::forward<Args>(args)...);
-    }
-private:
-    static jclass& classId(JNIEnv* env = nullptr) {
-        static jclass c = nullptr;
-        if (!c) {
-            if (!env) {
-                env = getEnv();
-                if (!env)
-                    return c;
-            }
-            const jclass cid = (jclass)env->FindClass(className().c_str());
-            if (cid) {
-                c = (jclass)env->NewGlobalRef(cid); // cache per (c++/java)class class id
-                env->DeleteLocalRef(cid); // can not use c
-            }
-        }
-        return c;
-    }
-    void setError(const std::string& s) {error_ = s; }
-    static std::string normalizeClassName(std::string&& name) {
-        std::string s = std::forward<std::string>(name);
-        if (s[0] == 'L' && s.back() == ';')
-            s = s.substr(1, s.size()-2);
-        replace(s.begin(), s.end(), '.', '/');
-        return s;
-    }
-
-    jobject oid_ = nullptr;
-    std::string error_;
-};
-
-template<class CTag>
-inline std::string signature_of(const JObject<CTag>& t) { return t.signature();}
 namespace detail {
+
+template<typename T>
+jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref) {
+    if (!env) {
+        env = getEnv();
+        if (!env)
+            return nullptr;
+    }
+    jarray arr = nullptr;
+    if (N == 0)
+        arr = make_jarray(env, T(), 0);
+    else
+        arr = make_jarray(env, c0, N);
+    if (!is_ref) {
+        if (std::is_fundamental<T>::value) {
+            set_jarray(env, arr, 0, N, c0);
+        } else { // string etc. must convert to jobject
+            for (std::size_t i = 0; i < N; ++i)
+                set_jarray(env, arr, i, 1, *((&c0)+i));
+        }
+    }
+    return arr;
+}
 template<class CTag>
 jvalue to_jvalue(const JObject<CTag> &obj, JNIEnv* env) {
     return to_jvalue(jobject(obj), env);
