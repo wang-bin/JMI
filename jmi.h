@@ -23,7 +23,7 @@ std::string to_string(jstring s, JNIEnv* env = nullptr);
 jstring from_string(const std::string& s, JNIEnv* env = nullptr);
  
 struct ClassTag {}; // used by JObject<Tag>. subclasses must define static const std::string() name(), with or without "L ;" around
-struct MethodTag {}; // used by call() and call_static(). subclasses must define static const char* name();
+struct MethodTag {}; // used by call() and callStatic(). subclasses must define static const char* name();
 template<class Tag>
 using if_ClassTag = typename std::enable_if<std::is_base_of<ClassTag, Tag>::value, bool>::type;
 template<class Tag>
@@ -31,6 +31,80 @@ using if_MethodTag = typename std::enable_if<std::is_base_of<MethodTag, Tag>::va
 template<class CTag, if_ClassTag<CTag>> class JObject;
 
 template<typename T> struct signature;
+
+// object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
+template<class CTag, if_ClassTag<CTag> = true>
+class JObject
+{
+public:
+    static const std::string className() {
+        static std::string s(normalizeClassName(CTag::name()));
+        return s;
+    }
+    static const std::string signature() {return "L" + className() + ";";}
+
+    JObject() {} // TODO: from jobject
+    ~JObject() { reset(); }
+    JObject(const JObject &other) { *this = other; }
+    JObject &operator=(const JObject &other);
+    JObject(JObject &&other) = default;
+    JObject &operator=(JObject &&other) = default;
+
+    operator jobject() const { return oid_;}
+    operator jclass() const { return classId();} // static?
+    jobject id() const { return oid_; }
+    explicit operator bool() const { return !!oid_;}
+    std::string error() const {return error_;}
+
+    void reset(JNIEnv *env = nullptr);
+
+    template<typename... Args>
+    bool create(Args&&... args);
+
+    /* with MethodTag we can avoid calling GetMethodID() in every call()
+        struct MyMethod : jmi::MethodTag { static const char* name() { return "myMethod";} };
+        return call<T, MyMethod>(args...);
+    */
+    template<typename T, class MTag, typename... Args, if_MethodTag<MTag> = true>
+    inline T call(Args&&... args);
+    template<class MTag, typename... Args, if_MethodTag<MTag> = true>
+    inline void call(Args&&... args);
+    /* with MethodTag we can avoid calling GetStaticMethodID() in every callStatic()
+        struct MyStaticMethod : jmi::MethodTag { static const char* name() { return "myStaticMethod";} };
+        JObject<CT>::callStatic<R, MyStaticMethod>(args...);
+    */
+    template<typename T, class MTag, typename... Args, if_MethodTag<MTag> = true>
+    static T callStatic(Args&&... args);
+    template<class MTag, typename... Args, if_MethodTag<MTag> = true>
+    static void callStatic(Args&&... args);
+    // the following call()/callStatic() will always invoke GetMethodID()/GetStaticMethodID()
+    template<typename T, typename... Args>
+    T call(const std::string &methodName, Args&&... args);
+    template<typename... Args>
+    void call(const std::string &methodName, Args&&... args);
+    template<typename T, typename... Args>
+    static T callStatic(const std::string &name, Args&&... args);
+    template<typename... Args>
+    static void callStatic(const std::string &name, Args&&... args);
+private:
+    static jclass classId(JNIEnv* env = nullptr);
+    void setError(const std::string& s) {error_ = s; }
+    static std::string normalizeClassName(std::string&& name) {
+        std::string s = std::forward<std::string>(name);
+        if (s[0] == 'L' && s.back() == ';')
+            s = s.substr(1, s.size()-2);
+        replace(s.begin(), s.end(), '.', '/');
+        return s;
+    }
+
+    jobject oid_ = nullptr;
+    std::string error_;
+};
+
+template<class CTag>
+inline std::string signature_of(const JObject<CTag>& t) { return t.signature();}
+
+
 template<> struct signature<jboolean> { static const char value = 'Z';};
 template<> struct signature<jbyte> { static const char value = 'B';};
 template<> struct signature<jchar> { static const char value = 'C';};
@@ -92,79 +166,6 @@ inline std::string signature_of(const std::reference_wrapper<T[N]>&) {
     //return signature_of<T,N>((T[N]){}); //aggregated initialize. can not use declval?
     return s;
 }
-
-// object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
-template<class CTag, if_ClassTag<CTag> = true>
-class JObject
-{
-public:
-    static const std::string className() {
-        static std::string s(normalizeClassName(CTag::name()));
-        return s;
-    }
-    static const std::string signature() {return "L" + className() + ";";}
-
-    JObject() {} // TODO: from jobject
-    ~JObject() { reset(); }
-    JObject(const JObject &other) { *this = other; }
-    JObject &operator=(const JObject &other);
-    JObject(JObject &&other) = default;
-    JObject &operator=(JObject &&other) = default;
-
-    operator jobject() const { return oid_;}
-    operator jclass() const { return classId();} // static?
-    jobject id() const { return oid_; }
-    explicit operator bool() const { return !!oid_;}
-    std::string error() const {return error_;}
-
-    void reset(JNIEnv *env = nullptr);
-
-    template<typename... Args>
-    bool create(Args&&... args);
-
-    /* with MethodTag we can avoid calling GetMethodID() in every call()
-        struct MyMethod : jmi::MethodTag { static const char* name() { return "myMethod";} };
-        return call<T, MyMethod>(args...);
-    */
-    template<typename T, class MTag, typename... Args, if_MethodTag<MTag> = true>
-    inline T call(Args&&... args);
-    template<class MTag, typename... Args, if_MethodTag<MTag> = true>
-    inline void call(Args&&... args);
-    /* with MethodTag we can avoid calling GetStaticMethodID() in every call_static()
-        struct MyStaticMethod : jmi::MethodTag { static const char* name() { return "myStaticMethod";} };
-        JObject<CT>::call_static<R, MyStaticMethod>(args...);
-    */
-    template<typename T, class MTag, typename... Args, if_MethodTag<MTag> = true>
-    static T callStatic(Args&&... args);
-    template<class MTag, typename... Args, if_MethodTag<MTag> = true>
-    static void callStatic(Args&&... args);
-    // the following call()/call_static() will always invoke GetMethodID()/GetStaticMethodID()
-    template<typename T, typename... Args>
-    T call(const std::string &methodName, Args&&... args);
-    template<typename... Args>
-    void call(const std::string &methodName, Args&&... args);
-    template<typename T, typename... Args>
-    static T callStatic(const std::string &name, Args&&... args);
-    template<typename... Args>
-    static void callStatic(const std::string &name, Args&&... args);
-private:
-    static jclass& classId(JNIEnv* env = nullptr);
-    void setError(const std::string& s) {error_ = s; }
-    static std::string normalizeClassName(std::string&& name) {
-        std::string s = std::forward<std::string>(name);
-        if (s[0] == 'L' && s.back() == ';')
-            s = s.substr(1, s.size()-2);
-        replace(s.begin(), s.end(), '.', '/');
-        return s;
-    }
-
-    jobject oid_ = nullptr;
-    std::string error_;
-};
-
-template<class CTag>
-inline std::string signature_of(const JObject<CTag>& t) { return t.signature();}
-
 
 namespace detail {
 using namespace std;
@@ -503,7 +504,7 @@ void JObject<CTag, V>::callStatic(const std::string &name, Args&&... args) {
 }
 
 template<class CTag, if_ClassTag<CTag> V>
-jclass& JObject<CTag, V>::classId(JNIEnv* env) {
+jclass JObject<CTag, V>::classId(JNIEnv* env) {
     static jclass c = nullptr;
     if (!c) {
         if (!env) {
