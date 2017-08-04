@@ -3,6 +3,7 @@
  * Copyright (C) 2016-2017 Wang Bin - wbsecg1@gmail.com
  * MIT License
  */
+// TODO: field, static java method/field should use static c++ member
 #pragma once
 #include <algorithm>
 #include <array>
@@ -340,7 +341,7 @@ public:
     JObject &operator=(JObject &&other) = default;
 
     operator jobject() const { return oid_;}
-    operator jclass() const { return classId();}
+    operator jclass() const { return classId();} // static?
     jobject id() const { return oid_; }
     explicit operator bool() const { return !!oid_;}
     std::string error() const {return error_;}
@@ -368,21 +369,12 @@ public:
                 return false;
             }
         }
-        jclass& cid = classId();
-        jclass cid_local = nullptr;
+        const jclass cid = classId();
         if (!cid) {
-            cid_local = (jclass)env->FindClass(className().c_str());
-            if (!cid_local) {
-                setError("Failed to find class '" + className() + "'");
-                return false;
-            }
-            cid = (jclass)env->NewGlobalRef(cid_local); // cache per (c++/java)class cid
+            setError("Failed to find class '" + className() + "'");
+            return false;
         }
-        auto checker = detail::call_on_exit([=]{
-            handle_exception(env);
-            if (cid_local)
-                env->DeleteLocalRef(cid_local); // can not use cid
-        });
+        auto checker = detail::call_on_exit([=]{ handle_exception(env); });
         static const string s(args_signature(forward<Args>(args)...).append(signature_of())); // void
         static const jmethodID mid = env->GetMethodID(cid, "<init>", s.c_str()); // can be static because class id, signature and arguments combination is unique
         if (!mid) {
@@ -469,8 +461,20 @@ public:
         call_static_with_methodID<void>(classId(), nullptr, [this](string err){ setError(err);}, s, name.c_str(), forward<Args>(args)...);
     }
 private:
-    static jclass& classId() {
+    static jclass& classId(JNIEnv* env = nullptr) {
         static jclass c = nullptr;
+        if (!c) {
+            if (!env) {
+                env = getEnv();
+                if (!env)
+                    return c;
+            }
+            const jclass cid = (jclass)env->FindClass(className().c_str());
+            if (cid) {
+                c = (jclass)env->NewGlobalRef(cid); // cache per (c++/java)class class id
+                env->DeleteLocalRef(cid); // can not use c
+            }
+        }
         return c;
     }
     void setError(const std::string& s) {error_ = s; }
