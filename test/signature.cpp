@@ -23,7 +23,6 @@ int main(int argc, char *argv[])
 {
     cout << "jmi test" << endl;
 
-    cout << jmi::signature_of(jmi::object()) << endl;
     cout << jmi::signature_of(1.2f) << endl;
     cout << jmi::signature_of(std::string()) << endl;
     std::valarray<float> f;

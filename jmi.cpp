@@ -108,110 +108,6 @@ jstring from_string(const std::string &s, JNIEnv* env)
     return (jstring)env->NewObject(strClass, ctorID, bytes, encoding);
 }
 
-object::object(const std::string &class_path, jclass class_id, jobject obj_id, JNIEnv* env)
-    : instance_(nullptr), class_(nullptr) {
-    init(env, obj_id, class_id, class_path);
-}
-/*
-object::object(jclass class_id, jobject obj_id, JNIEnv* env) : object(std::string(), class_id, obj_id, env) {}
-*/
-object::object(jobject obj_id, JNIEnv* env) : object(std::string(), nullptr, obj_id, env) {}
-
-object::object(const object &other) : object(other.class_path_, other.class_, other.instance_) {}
-object::object(object &&other) // can not use default implemention
-{
-    std::swap(class_path_, other.class_path_);
-    std::swap(instance_, other.instance_);
-    std::swap(class_, other.class_);
-    std::swap(error_, other.error_);
-}
-
-object &object::operator=(const object &other) {
-    JNIEnv *env = getEnv();
-    reset(env);
-    class_path_ = other.class_path_;
-    init(env, other.instance_, other.class_, class_path_);
-    return *this;
-}
-
-object &object::operator=(object &&other) {
-    std::swap(class_path_, other.class_path_);
-    std::swap(instance_, other.instance_);
-    std::swap(class_, other.class_);
-    std::swap(error_, other.error_);
-    return *this;
-}
-
-bool object::operator==(const object &other) const {
-    JNIEnv *env = getEnv();
-    if (!env)
-        return false;
-    jobject a = instance_;
-    jobject b = other;
-    if (a && b)
-        return env->IsSameObject(a, b);
-    a = get_class();
-    b = other.get_class();
-    return env->IsSameObject(a, b);
-}
-
-void object::init(JNIEnv* env, jobject obj_id, jclass class_id, const std::string &class_path) {
-    using namespace detail;
-    if (!obj_id && !class_id && class_path.empty())
-        return;
-    if (!env)
-        env = getEnv();
-    class_path_ = class_path;
-    std::replace(class_path_.begin(), class_path_.end(), '.', '/');
-    jclass cid = nullptr;
-    if (!class_id) {
-        if (obj_id) {
-            cid = env->GetObjectClass(obj_id);
-            //class_path.clear();
-        } else if (!class_path.empty()) {
-            cid = (jclass)env->FindClass(class_path_.data());
-        }
-    }
-    auto checker = call_on_exit([=]{
-        handle_exception(env);
-        if (cid)
-            env->DeleteLocalRef(cid);
-    });
-    if (cid)
-        class_id = cid;
-    if (!class_id)
-        return;
-    class_ = (jclass)env->NewGlobalRef(class_id);
-    if (obj_id)
-        instance_ = env->NewGlobalRef(obj_id);
-    if (class_path_.empty() && instance_ && class_) // TODO: call a static method and instance_ is not required?
-        class_path_ = object("java/lang/Class", class_).call_static<std::string>("getName");
-    if (class_)
-        return;
-    std::string err("Could not find class");
-    if (!class_path_.empty())
-        err += " '" + class_path_ + "'.";
-    set_error(err);
-}
-
-void object::reset(JNIEnv *env) {
-    error_.clear();
-    if (!env)
-        env = getEnv();
-    if (class_)
-        env->DeleteGlobalRef(class_);
-    if (instance_)
-        env->DeleteGlobalRef(instance_);
-    class_ = nullptr;
-    instance_ = nullptr;
-}
-
-object& object::set_error(const std::string& err) 
-{
-    error_ = err;
-    return *this;
-}
-
 namespace detail {
 
 template<typename T>
@@ -228,12 +124,6 @@ template<>
 bool from_j(JNIEnv *env, jobject obj, std::string &out) {
     out = to_string(static_cast<jstring>(obj), env);
     return !out.empty();
-}
-template<>
-bool from_j(JNIEnv *env, jobject obj, object &out) {
-    out = obj;
-    env->DeleteLocalRef(obj);
-    return true;
 }
 
 template<>
@@ -276,10 +166,6 @@ template<>
 std::string call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return from_j<std::string>(env, call_method<jobject>(env, obj_id, methodId, args));
 }
-template<>
-object call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
-    return from_j<object>(env, call_method<jobject>(env, obj_id, methodId, args));
-}
 
 template<>
 void call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
@@ -309,10 +195,6 @@ template<>
 std::string call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     return from_j<std::string>(env, call_static_method<jobject>(env, classId, methodId, args));
 }
-template<>
-object call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
-    return from_j<object>(env, call_static_method<jobject>(env, classId, methodId, args));
-}
 
 template<> jvalue to_jvalue(const jboolean &obj, JNIEnv* env) { return jvalue{.z = obj};}
 template<> jvalue to_jvalue(const jbyte &obj, JNIEnv* env) { return jvalue{.b = obj};}
@@ -322,9 +204,6 @@ template<> jvalue to_jvalue(const jint &obj, JNIEnv* env) { return jvalue{.i = o
 template<> jvalue to_jvalue(const jlong &obj, JNIEnv* env) { return jvalue{.j = obj};}
 template<> jvalue to_jvalue(const jfloat &obj, JNIEnv* env) { return jvalue{.f = obj};}
 template<> jvalue to_jvalue(const jdouble &obj, JNIEnv* env) { return jvalue{.d = obj};}
-template<> jvalue to_jvalue(const object &obj, JNIEnv* env) {
-    return to_jvalue(obj.instance(), env);
-}
 template<> jvalue to_jvalue(const std::string &obj, JNIEnv* env) {
     return to_jvalue(env->NewStringUTF(obj.c_str()), env);
 }
@@ -375,10 +254,6 @@ jarray make_jarray(JNIEnv *env, const double&, size_t size) {
 template<>
 jarray make_jarray(JNIEnv *env, const std::string&, size_t size) {
     return env->NewObjectArray(size, env->FindClass("java/lang/String"), 0);
-}
-template<>
-jarray make_jarray(JNIEnv *env, const object &element, size_t size) {
-    return env->NewObjectArray(size, element.get_class(), 0);
 }
 
 template<>
@@ -444,10 +319,6 @@ template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const std::string &elm) {
     jobject obj = env->NewStringUTF(elm.c_str());
     set_jarray(env, arr, position, n, obj);
-}
-template<>
-void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const object &elm) {
-    set_jarray(env, arr, position, n, elm.instance());
 }
 
 template<> void from_jvalue(JNIEnv*, const jvalue& v, bool& t) { t = v.z;}
