@@ -112,7 +112,9 @@ object::object(const std::string &class_path, jclass class_id, jobject obj_id, J
     : instance_(nullptr), class_(nullptr) {
     init(env, obj_id, class_id, class_path);
 }
+/*
 object::object(jclass class_id, jobject obj_id, JNIEnv* env) : object(std::string(), class_id, obj_id, env) {}
+*/
 object::object(jobject obj_id, JNIEnv* env) : object(std::string(), nullptr, obj_id, env) {}
 
 object::object(const object &other) : object(other.class_path_, other.class_, other.instance_) {}
@@ -154,6 +156,7 @@ bool object::operator==(const object &other) const {
 }
 
 void object::init(JNIEnv* env, jobject obj_id, jclass class_id, const std::string &class_path) {
+    using namespace detail;
     if (!obj_id && !class_id && class_path.empty())
         return;
     if (!env)
@@ -209,6 +212,8 @@ object& object::set_error(const std::string& err)
     return *this;
 }
 
+namespace detail {
+
 template<typename T>
 static bool from_j(JNIEnv *env, jobject obj, T &out);
 
@@ -232,157 +237,157 @@ bool from_j(JNIEnv *env, jobject obj, object &out) {
 }
 
 template<>
-void object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+void call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     env->CallVoidMethodA(obj_id, methodId, args);
 }
 template<>
-jboolean object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+jboolean call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallBooleanMethodA(obj_id, methodId, args);
 }
 template<>
-jbyte object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+jbyte call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallByteMethodA(obj_id, methodId, args);
 }
 template<>
-jchar object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+jchar call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallCharMethodA(obj_id, methodId, args);
 }
 template<>
-jobject object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+jobject call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallObjectMethodA(obj_id, methodId, args);
 }
 template<>
-double object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+double call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallDoubleMethodA(obj_id, methodId, args);
 }
 template<>
-jlong object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+jlong call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallLongMethodA(obj_id, methodId, args);
 }
 template<>
-float object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+float call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallFloatMethodA(obj_id, methodId, args);
 }
 template<>
-int object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+int call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallIntMethodA(obj_id, methodId, args);
 }
 template<>
-std::string object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+std::string call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return from_j<std::string>(env, call_method<jobject>(env, obj_id, methodId, args));
 }
 template<>
-object object::call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) const {
+object call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return from_j<object>(env, call_method<jobject>(env, obj_id, methodId, args));
 }
 
 template<>
-void object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+void call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     env->CallStaticVoidMethodA(classId, methodId, args);
 }
 template<>
-jobject object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+jobject call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     return env->CallStaticObjectMethodA(classId, methodId, args);
 }
 template<>
-double object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+double call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     return env->CallStaticDoubleMethodA(classId, methodId, args);
 }
 template<>
-jlong object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+jlong call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     return env->CallStaticLongMethodA(classId, methodId, args);
 }
 template<>
-float object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+float call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     return env->CallStaticFloatMethodA(classId, methodId, args);
 }
 template<>
-int object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+int call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     return env->CallStaticIntMethodA(classId, methodId, args);
 }
 template<>
-std::string object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+std::string call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     return from_j<std::string>(env, call_static_method<jobject>(env, classId, methodId, args));
 }
 template<>
-object object::call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) const {
+object call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     return from_j<object>(env, call_static_method<jobject>(env, classId, methodId, args));
 }
 
-template<> jvalue object::to_jvalue(const jboolean &obj, JNIEnv* env) { return jvalue{.z = obj};}
-template<> jvalue object::to_jvalue(const jbyte &obj, JNIEnv* env) { return jvalue{.b = obj};}
-template<> jvalue object::to_jvalue(const jchar &obj, JNIEnv* env) { return jvalue{.c = obj};}
-template<> jvalue object::to_jvalue(const jshort &obj, JNIEnv* env) { return jvalue{.s = obj};}
-template<> jvalue object::to_jvalue(const jint &obj, JNIEnv* env) { return jvalue{.i = obj};}
-template<> jvalue object::to_jvalue(const jlong &obj, JNIEnv* env) { return jvalue{.j = obj};}
-template<> jvalue object::to_jvalue(const jfloat &obj, JNIEnv* env) { return jvalue{.f = obj};}
-template<> jvalue object::to_jvalue(const jdouble &obj, JNIEnv* env) { return jvalue{.d = obj};}
-template<> jvalue object::to_jvalue(const object &obj, JNIEnv* env) {
-    return to_jvalue(obj.instance_, env);
+template<> jvalue to_jvalue(const jboolean &obj, JNIEnv* env) { return jvalue{.z = obj};}
+template<> jvalue to_jvalue(const jbyte &obj, JNIEnv* env) { return jvalue{.b = obj};}
+template<> jvalue to_jvalue(const jchar &obj, JNIEnv* env) { return jvalue{.c = obj};}
+template<> jvalue to_jvalue(const jshort &obj, JNIEnv* env) { return jvalue{.s = obj};}
+template<> jvalue to_jvalue(const jint &obj, JNIEnv* env) { return jvalue{.i = obj};}
+template<> jvalue to_jvalue(const jlong &obj, JNIEnv* env) { return jvalue{.j = obj};}
+template<> jvalue to_jvalue(const jfloat &obj, JNIEnv* env) { return jvalue{.f = obj};}
+template<> jvalue to_jvalue(const jdouble &obj, JNIEnv* env) { return jvalue{.d = obj};}
+template<> jvalue to_jvalue(const object &obj, JNIEnv* env) {
+    return to_jvalue(obj.instance(), env);
 }
-template<> jvalue object::to_jvalue(const std::string &obj, JNIEnv* env) {
+template<> jvalue to_jvalue(const std::string &obj, JNIEnv* env) {
     return to_jvalue(env->NewStringUTF(obj.c_str()), env);
 }
-jvalue object::to_jvalue(const char* s, JNIEnv* env) {
+jvalue to_jvalue(const char* s, JNIEnv* env) {
     return to_jvalue(env->NewStringUTF(s), env);
 }
 
 template<>
-jarray object::make_jarray(JNIEnv *env, const jobject &element, size_t size) {
+jarray make_jarray(JNIEnv *env, const jobject &element, size_t size) {
     return env->NewObjectArray(size, env->GetObjectClass(element), 0);
 }
 template<>
-jarray object::make_jarray(JNIEnv *env, const bool&, size_t size) {
+jarray make_jarray(JNIEnv *env, const bool&, size_t size) {
     return env->NewBooleanArray(size);
 }
 template<>
-jarray object::make_jarray(JNIEnv *env, const char&, size_t size) {
+jarray make_jarray(JNIEnv *env, const char&, size_t size) {
     return env->NewByteArray(size); // must DeleteLocalRef
 }
 template<>
-jarray object::make_jarray(JNIEnv *env, const jbyte&, size_t size) {
+jarray make_jarray(JNIEnv *env, const jbyte&, size_t size) {
     return env->NewByteArray(size); // must DeleteLocalRef
 }
 template<>
-jarray object::make_jarray(JNIEnv *env, const jchar&, size_t size) {
+jarray make_jarray(JNIEnv *env, const jchar&, size_t size) {
     return env->NewCharArray(size);
 }
 template<>
-jarray object::make_jarray(JNIEnv *env, const jshort&, size_t size) {
+jarray make_jarray(JNIEnv *env, const jshort&, size_t size) {
     return env->NewShortArray(size);
 }
 template<>
-jarray object::make_jarray(JNIEnv *env, const jint&, size_t size) {
+jarray make_jarray(JNIEnv *env, const jint&, size_t size) {
     return env->NewIntArray(size);
 }
 template<>
-jarray object::make_jarray(JNIEnv *env, const jlong&, size_t size) {
+jarray make_jarray(JNIEnv *env, const jlong&, size_t size) {
     return env->NewLongArray(size);
 }
 template<>
-jarray object::make_jarray(JNIEnv *env, const float&, size_t size) {
+jarray make_jarray(JNIEnv *env, const float&, size_t size) {
     return env->NewFloatArray(size);
 }
 template<>
-jarray object::make_jarray(JNIEnv *env, const double&, size_t size) {
+jarray make_jarray(JNIEnv *env, const double&, size_t size) {
     return env->NewDoubleArray(size);
 }
 template<>
-jarray object::make_jarray(JNIEnv *env, const std::string&, size_t size) {
+jarray make_jarray(JNIEnv *env, const std::string&, size_t size) {
     return env->NewObjectArray(size, env->FindClass("java/lang/String"), 0);
 }
 template<>
-jarray object::make_jarray(JNIEnv *env, const object &element, size_t size) {
+jarray make_jarray(JNIEnv *env, const object &element, size_t size) {
     return env->NewObjectArray(size, element.get_class(), 0);
 }
 
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jobject &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jobject &elm) {
     assert(n == 1 && "set only 1 jobject array element is allowed");
     env->SetObjectArrayElement((jobjectArray)arr, position, elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const bool &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const bool &elm) {
     if (n == 1 || sizeof(jboolean) == sizeof(bool)) {
         env->SetBooleanArrayRegion((jbooleanArray)arr, position, n, (const jboolean*)&elm);
     } else {
@@ -393,15 +398,15 @@ void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, cons
     }
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jboolean &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jboolean &elm) {
     env->SetBooleanArrayRegion((jbooleanArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jbyte &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jbyte &elm) {
     env->SetByteArrayRegion((jbyteArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const char &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const char &elm) {
     if (n == 1 || sizeof(jbyte) == sizeof(char)) {
         env->SetByteArrayRegion((jbyteArray)arr, position, n, (const jbyte*)&elm);
     } else {
@@ -412,52 +417,52 @@ void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, cons
     }
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jchar &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jchar &elm) {
     env->SetCharArrayRegion((jcharArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jshort &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jshort &elm) {
     env->SetShortArrayRegion((jshortArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jint &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jint &elm) {
     env->SetIntArrayRegion((jintArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jlong &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jlong &elm) {
     env->SetLongArrayRegion((jlongArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jfloat &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jfloat &elm) {
     env->SetFloatArrayRegion((jfloatArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jdouble &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jdouble &elm) {
     env->SetDoubleArrayRegion((jdoubleArray)arr, position, n, &elm);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const std::string &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const std::string &elm) {
     jobject obj = env->NewStringUTF(elm.c_str());
     set_jarray(env, arr, position, n, obj);
 }
 template<>
-void object::set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const object &elm) {
-    set_jarray(env, arr, position, n, elm.instance_);
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const object &elm) {
+    set_jarray(env, arr, position, n, elm.instance());
 }
 
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, bool& t) { t = v.z;}
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, char& t) { t = v.b;}
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, uint8_t& t) { t = v.b;}
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, int8_t& t) { t = v.b;}
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, uint16_t& t) { t = v.c;} //jchar is 16bit, uint16_t or unsigned short. use wchar_t?
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, int16_t& t) { t = v.s;}
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, uint32_t& t) { t = v.i;}
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, int32_t& t) { t = v.i;}
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, uint64_t& t) { t = v.j;}
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, jlong& t) { t = v.j;}
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, float& t) { t = v.f;}
-template<> void object::from_jvalue(JNIEnv*, const jvalue& v, double& t) { t = v.d;}
-template<> void object::from_jvalue(JNIEnv* env, const jvalue& v, std::string& t)
+template<> void from_jvalue(JNIEnv*, const jvalue& v, bool& t) { t = v.z;}
+template<> void from_jvalue(JNIEnv*, const jvalue& v, char& t) { t = v.b;}
+template<> void from_jvalue(JNIEnv*, const jvalue& v, uint8_t& t) { t = v.b;}
+template<> void from_jvalue(JNIEnv*, const jvalue& v, int8_t& t) { t = v.b;}
+template<> void from_jvalue(JNIEnv*, const jvalue& v, uint16_t& t) { t = v.c;} //jchar is 16bit, uint16_t or unsigned short. use wchar_t?
+template<> void from_jvalue(JNIEnv*, const jvalue& v, int16_t& t) { t = v.s;}
+template<> void from_jvalue(JNIEnv*, const jvalue& v, uint32_t& t) { t = v.i;}
+template<> void from_jvalue(JNIEnv*, const jvalue& v, int32_t& t) { t = v.i;}
+template<> void from_jvalue(JNIEnv*, const jvalue& v, uint64_t& t) { t = v.j;}
+template<> void from_jvalue(JNIEnv*, const jvalue& v, jlong& t) { t = v.j;}
+template<> void from_jvalue(JNIEnv*, const jvalue& v, float& t) { t = v.f;}
+template<> void from_jvalue(JNIEnv*, const jvalue& v, double& t) { t = v.d;}
+template<> void from_jvalue(JNIEnv* env, const jvalue& v, std::string& t)
 {
     if (!env)
         env = getEnv();
@@ -469,40 +474,41 @@ template<> void object::from_jvalue(JNIEnv* env, const jvalue& v, std::string& t
     env->ReleaseStringUTFChars(s, cs);
 }
 
-template<> void object::from_jarray(JNIEnv* env, const jvalue& v, jboolean* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jboolean* t, std::size_t N)
 {
     env->GetBooleanArrayRegion(static_cast<jbooleanArray>(v.l), 0, N, t);
 }
-template<> void object::from_jarray(JNIEnv* env, const jvalue& v, char* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, char* t, std::size_t N)
 {
     env->GetByteArrayRegion(static_cast<jbyteArray>(v.l), 0, N, (jbyte*)t);
 }
-template<> void object::from_jarray(JNIEnv* env, const jvalue& v, jbyte* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jbyte* t, std::size_t N)
 {
     env->GetByteArrayRegion(static_cast<jbyteArray>(v.l), 0, N, t);
 }
-template<> void object::from_jarray(JNIEnv* env, const jvalue& v, jchar* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jchar* t, std::size_t N)
 {
     env->GetCharArrayRegion(static_cast<jcharArray>(v.l), 0, N, t);
 }
-template<> void object::from_jarray(JNIEnv* env, const jvalue& v, jshort* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jshort* t, std::size_t N)
 {
     env->GetShortArrayRegion(static_cast<jshortArray>(v.l), 0, N, t);
 }
-template<> void object::from_jarray(JNIEnv* env, const jvalue& v, jint* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jint* t, std::size_t N)
 {
     env->GetIntArrayRegion(static_cast<jintArray>(v.l), 0, N, t);
 }
-template<> void object::from_jarray(JNIEnv* env, const jvalue& v, jlong* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jlong* t, std::size_t N)
 {
     env->GetLongArrayRegion(static_cast<jlongArray>(v.l), 0, N, t);
 }
-template<> void object::from_jarray(JNIEnv* env, const jvalue& v, float* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, float* t, std::size_t N)
 {
     env->GetFloatArrayRegion(static_cast<jfloatArray>(v.l), 0, N, t);
 }
-template<> void object::from_jarray(JNIEnv* env, const jvalue& v, double* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, double* t, std::size_t N)
 {
     env->GetDoubleArrayRegion(static_cast<jdoubleArray>(v.l), 0, N, t);
 }
+} // namespace detail
 } //namespace jmi
