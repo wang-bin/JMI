@@ -22,6 +22,10 @@ JNIEnv *getEnv();
 std::string to_string(jstring s, JNIEnv* env = nullptr);
 jstring from_string(const std::string& s, JNIEnv* env = nullptr);
 
+struct ClassTag {}; // used by JObject<Tag>. subclasses must define static const std::string() name(), with or without "L ;" around
+struct MethodTag {}; // used by call() and call_static(). subclasses must define static const char* name();
+template<class CTag, typename std::enable_if<std::is_base_of<ClassTag, CTag>::value, bool>::type> class JObject;
+
 template<typename T> struct signature;
 template<> struct signature<jboolean> { static const char value = 'Z';};
 template<> struct signature<jbyte> { static const char value = 'B';};
@@ -87,7 +91,7 @@ inline std::string signature_of(const std::reference_wrapper<T[N]>&) {
 
 namespace detail {
 using namespace std;
-    static bool handle_exception(JNIEnv* env) {
+    static inline bool handle_exception(JNIEnv* env) { //'static' function 'handle_exception' declared in header file should be declared 'static inline' [-Wunneeded-internal-declaration]
         if (!env->ExceptionCheck())
             return false;
         env->ExceptionDescribe();
@@ -136,9 +140,13 @@ using namespace std;
 
     template<typename T>
     jarray make_jarray(JNIEnv *env, const T &element, size_t size); // element is for getting jobject class
+    template<class CTag>
+    jarray make_jarray(JNIEnv *env, const JObject<CTag, true> &element, size_t size);
 
     template<typename T>
     void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const T &elm);
+    template<class CTag>
+    void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const JObject<CTag, true> &elm);
 
     template<typename T>
     jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref = false) {
@@ -177,6 +185,8 @@ using namespace std;
     template<typename T, std::size_t N> jvalue to_jvalue(const std::array<T, N> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
     template<typename C> jvalue to_jvalue(const std::reference_wrapper<C>& c, JNIEnv* env) { return to_jvalue(to_jarray(env, c.get(), true), env); }
     template<typename T, std::size_t N> jvalue to_jvalue(const std::reference_wrapper<T[N]>& c, JNIEnv* env) { return to_jvalue(to_jarray<T,N>(env, c.get(), true), env); }
+    template<class CTag>
+    jvalue to_jvalue(const JObject<CTag, true> &obj, JNIEnv* env);
     // T(&)[N]?
 #if 0
     // can not defined as template specialization because to_jvalue(T*, JNIEnv* env) will be choosed
@@ -232,6 +242,9 @@ using namespace std;
 
     template<typename T>
     T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args);
+    template<class CTag>
+    JObject<CTag, true> call_method(JNIEnv *env, jobject obj, jmethodID methodId, jvalue *args);
+
     template<typename T, typename... Args>
     T call_method_set_ref(JNIEnv *env, jobject oid, jmethodID mid, jvalue *jargs, Args&&... args) {
         auto setter = call_on_exit([=]{
@@ -311,8 +324,6 @@ using namespace std;
 
 } // namespace detail
 
-struct ClassTag {}; // used by JObject<Tag>. subclasses must define static const std::string() name(), with or without "L ;" around
-struct MethodTag {}; // used by call() and call_static(). subclasses must define static const char* name();
 // object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
 template<class CTag, typename std::enable_if<std::is_base_of<ClassTag, CTag>::value, bool>::type = true>
 class JObject
@@ -324,7 +335,7 @@ public:
     }
     static const std::string signature() {return "L" + className() + ";";}
 
-    JObject() {}
+    JObject() {} // TODO: from jobject
     ~JObject() { reset(); }
     JObject(const JObject &other) { *this = other; }
     JObject &operator=(const JObject &other) {
@@ -482,14 +493,30 @@ private:
     std::string error_;
 };
 
-template<class ClassTag>
-inline std::string signature_of(const JObject<ClassTag>& t) { return t.signature();}
-/* TODO:
-    template<class ClassTag> bool from_j(JNIEnv *env, jobject obj, JObject<ClassTag> &out)
-    JObject call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args)
-    JObject call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args)
-    to_jvalue(const object &obj, JNIEnv* env)
-    make_jarray(JNIEnv *env, const object &element, size_t size)
-    set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const object &elm)
+template<class CTag>
+inline std::string signature_of(const JObject<CTag>& t) { return t.signature();}
+namespace detail {
+template<class CTag>
+jvalue to_jvalue(const JObject<CTag> &obj, JNIEnv* env) {
+    return to_jvalue(jobject(obj), env);
+}
+template<class CTag>
+jarray make_jarray(JNIEnv *env, const JObject<CTag> &element, size_t size) {
+    return env->NewObjectArray(size, jclass(element), 0);
+}
+template<class CTag>
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const JObject<CTag> &elm) {
+    set_jarray(env, arr, position, n, jobject(elm));
+}
+/*
+template<class CTag>
+JObject<CTag> call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args) {
+    return call_method<jobject>(env, oid, mid, args);
+}
+template<class CTag>
+JObject<CTag call_static_method(JNIEnv *env, jclass cid, jmethodID mid, jvalue *args) {
+    return call_static_method<jobject>(env, cid, mid, args);
+}
 */
+} //namespace detail
 } //namespace jmi
