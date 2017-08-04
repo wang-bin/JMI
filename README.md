@@ -7,68 +7,63 @@
 - getEnv() at any thread without caring about when to detach
 - Support both In & Out parameters for JNI methods
 - Per java class jclass cache and per method jmethodID cache
-- Same C++/Java linkage: static java methods is static member function in C++
+- The same C++/Java linkage: a static java member is a static member in C++
+
 
 ### Example:
 - Setup java vm in `JNI_OnLoad`: `jmi::javaVM(vm);`
+
 - Create a SurfaceTexture: 
 ```
+    // define SurfaceTexture tag class in any scope visibile by jmi::JObject<SurfaceTexture>
     struct SurfaceTexture : jmi::ClassTag { static std::string name() {return "android/graphics/SurfaceTexture";}};
-    jmi::JObject<SurfaceTexture> st;
-    st.create(tex);
+    ...
+    GLuint tex = ...
+    ...
+    jmi::JObject<SurfaceTexture> texture;
+    if (!texture.create(tex)) {
+        // texture.error() ...
+    }
 ```
 
-or
-
-```
-    jmi::object st = jmi::object::create("android/graphics/SurfaceTexture", tex);
-```
-- Check error:
-```
-    if (!st.error().empty()) {...}
-```
 - Create Surface from SurfaceTexture:
 ```
-    jmi:object s = jmi::object::create("android.view.Surface", st);
+    struct Surface : jmi::ClassTag { static std::string name() {return "android.view.Surface";}}; // '.' or '/'
+    ...
+    jmi::JObject<Surface> surface;
+    surface.create(texture);
 ```
+
 - Call void method:
 ```
-    st.call("updateTexImage");
-```
-
-or to cache jmethodID and call `GetMethodID()` only once internally, use `MethodTag`
-
-```
-    struct UpdateTexImage : jmi::MethodTag { static const char* name() {return "updateTexImage";}};
-    st.call<UpdateTexImage>();
+    texture.call("updateTexImage");
 ```
 
 - Call method with output parameters:
 ```
-    std::array<float, 16> mat4; //or float mat4[16];
-    st.call("getTransformMatrix", std::ref(mat4)); // use std::ref() if parameter will be modified by jni method
-```
-
-or use `MethodTag`
-
-```
-    struct GetTransformMatrix : jmi::MethodTag { static const char* name() {return "getTransformMatrix";}};
     float mat4[16] mat4; // or std::array<float, 16>, valarray<float>
-    st.call<GetTransformMatrix>(std::ref(mat4)); // use std::ref() if parameter will be modified by jni method
+    texture.call("getTransformMatrix", std::ref(mat4)); // use std::ref() if parameter should be modified by jni method
 ```
 
 - Call method with a return type:
 ```
-    jlong t = st.call<jlong>("getTimestamp");
+    jlong t = texture.call<jlong>("getTimestamp");
 ```
 
-or use `MethodTag`
+## jmethodID Cache
+
+`call("methodName", ....)`/`callStatic("methodName", ....)` always invokes `GetMethodID()`/`GetStaticMethodID()`. To avoid this and invoke only once for each method of a java class, use overload one `call<...MTag>(...)`, where `MTag` is a subclass of `jmi:MethodTag` implementing `static const char* name() { return "methodName";}`.
 
 ```
+    // GetMethodID() will be invoked only once for each method in the scope of MethodTag subclass
+    struct UpdateTexImage : jmi::MethodTag { static const char* name() {return "updateTexImage";}};
     struct GetTimestamp : jmi::MethodTag { static const char* name() {return "getTimestamp";}};
-    jlong t = st.call<jlong, GetTimestamp>();
+    struct GetTransformMatrix : jmi::MethodTag { static const char* name() {return "getTransformMatrix";}};
+    ...
+    texture.call<UpdateTexImage>();
+    jlong t = texture.call<jlong, GetTimestamp>();
+    texture.call<GetTransformMatrix>(std::ref(mat4)); // use std::ref() if parameter should be modified by jni method
 ```
-
 
 ### Known Issues
 
