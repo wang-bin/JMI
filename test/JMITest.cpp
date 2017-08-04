@@ -42,7 +42,7 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	cout << "JString[2]: " << (char)jstr.call<jchar>("charAt", 2) << jstr.error() << std::endl;
 	//jmethodID mid= env->GetMethodID(js.get_class(),"charAt", "(I)C");
 	//std::cout << "[2]:" <<(char)env->CallCharMethod(js.instance(), mid, 2) << endl;
-    cout << "valueOf: " << jstr.callStatic<std::string>("valueOf", 123) << jstr.error() << std::endl;
+    cout << "valueOf: " << jmi::JObject<JString>::callStatic<std::string>("valueOf", 123) << jstr.error() << std::endl;
     cout << "indexOf c: " << jstr.call<jint>("indexOf", std::string("c"), 1) << jstr.error() << std::endl;
 	struct IndexOf : jmi::MethodTag { static const char* name() {return "indexOf";} };
     cout << "JString.indexOf c: " << jstr.call<jint,IndexOf>(std::string("c"), 1) << jstr.error() << std::endl;

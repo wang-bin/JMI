@@ -396,69 +396,61 @@ public:
     */
     template<typename T, class MTag, typename... Args, typename std::enable_if<std::is_base_of<MethodTag, MTag>::value, bool>::type = true>
     T call(Args&&... args) {
-        using namespace std;
         using namespace detail;
-        static const auto s = args_signature(forward<Args>(args)...).append(signature_of(T()));
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
         static jmethodID mid = nullptr;
-        return call_with_methodID<T>(oid_, classId(), &mid, [this](string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
+        return call_with_methodID<T>(oid_, classId(), &mid, [this](std::string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
     }
     template<class MTag, typename... Args, typename std::enable_if<std::is_base_of<MethodTag, MTag>::value, bool>::type = true>
     void call(Args&&... args) {
-        using namespace std;
         using namespace detail;
-        static const auto s = args_signature(forward<Args>(args)...).append(signature_of());
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
         static jmethodID mid = nullptr;
-        call_with_methodID<void>(oid_, classId(), &mid, [this](string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
+        call_with_methodID<void>(oid_, classId(), &mid, [this](std::string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
     }
     /* with MethodTag we can avoid calling GetStaticMethodID() in every call_static()
         struct MyStaticMethod : jmi::MethodTag { static const char* name() { return "myStaticMethod";} };
-        return call_static<T, MyStaticMethod>(args...);
+        JObject<CT>::call_static<R, MyStaticMethod>(args...);
     */
     template<typename T, class MTag, typename... Args, typename std::enable_if<std::is_base_of<MethodTag, MTag>::value, bool>::type = true>
-    T callStatic(Args&&... args) {
-        using namespace std;
+    static T callStatic(Args&&... args) {
         using namespace detail;
-        static const auto s = args_signature(forward<Args>(args)...).append(signature_of(T()));
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
         static jmethodID mid = nullptr;
-        return call_static_with_methodID<T>(classId(), &mid, [this](string err){ setError(err);}, s, MTag::name(), forward<Args>(args)...);
+        return call_static_with_methodID<T>(classId(), &mid, nullptr, s, MTag::name(), std::forward<Args>(args)...);
     }
     template<class MTag, typename... Args, typename std::enable_if<std::is_base_of<MethodTag, MTag>::value, bool>::type = true>
-    void callStatic(Args&&... args) {
-        using namespace std;
+    static void callStatic(Args&&... args) {
         using namespace detail;
-        static const auto s = args_signature(forward<Args>(args)...).append(signature_of());
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
         static jmethodID mid = nullptr;
-        return detail::call_static_with_methodID<void>(classId(), &mid, [this](string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
+        return call_static_with_methodID<void>(classId(), &mid, nullptr, s, MTag::name(), std::forward<Args>(args)...);
     }
 
     // the following call()/call_static() will always invoke GetMethodID()/GetStaticMethodID()
     template<typename T, typename... Args>
     T call(const std::string &methodName, Args&&... args) {
-        using namespace std;
         using namespace detail;
-        static const auto s = args_signature(forward<Args>(args)...).append(signature_of(T()));
-        return detail::call_with_methodID<T>(oid_, classId(), nullptr, [this](string err){ setError(err);}, s, methodName.c_str(), forward<Args>(args)...);
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+        return call_with_methodID<T>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
     }
     template<typename... Args>
     void call(const std::string &methodName, Args&&... args) {
-        using namespace std;
         using namespace detail;
-        static const auto s = args_signature(forward<Args>(args)...).append(signature_of());
-        call_with_methodID<void>(oid_, classId(), nullptr, [this](string err){ setError(err);}, s, methodName.c_str(), forward<Args>(args)...);
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
+        call_with_methodID<void>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
     }
     template<typename T, typename... Args>
-    T callStatic(const std::string &name, Args&&... args) {
-        using namespace std;
+    static T callStatic(const std::string &name, Args&&... args) {
         using namespace detail;
-        static const auto s = args_signature(forward<Args>(args)...).append(signature_of(T()));
-        return call_static_with_methodID<T>(classId(), nullptr, [this](string err){ setError(err);}, s, name.c_str(), forward<Args>(args)...);
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+        return call_static_with_methodID<T>(classId(), nullptr, nullptr, s, name.c_str(), std::forward<Args>(args)...);
     }
     template<typename... Args>
-    void callStatic(const std::string &name, Args&&... args) {
-        using namespace std;
+    static void callStatic(const std::string &name, Args&&... args) {
         using namespace detail;
-        static const auto s = args_signature(forward<Args>(args)...).append(signature_of());
-        call_static_with_methodID<void>(classId(), nullptr, [this](string err){ setError(err);}, s, name.c_str(), forward<Args>(args)...);
+        static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
+        call_static_with_methodID<void>(classId(), nullptr, nullptr, s, name.c_str(), std::forward<Args>(args)...);
     }
 private:
     static jclass& classId(JNIEnv* env = nullptr) {
