@@ -115,6 +115,8 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	fstr = test.field<Str, std::string>();
 	test.field<Str, std::string>();
 	fstr.set("Cacheable Field str set");
+	std::string v_fstr = fstr;
+	jfieldID id_fstr = fstr;
 	cout << "field JMITest.str from Cacheable Field object after set(): " << fstr.get() << endl;
 	fstr.set("Cacheable Field str =()");
 	cout << "field JMITest.str from Cacheable Field object after =(): " << fstr.get() << endl;
