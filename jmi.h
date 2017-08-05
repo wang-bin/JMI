@@ -466,12 +466,11 @@ using namespace std;
 
 
     template<typename T>
-    jfieldID get_field_id(JNIEnv* env, jclass cid, jfieldID* pfid, const char* name) { // TODO: pfid at last and nullptr
+    jfieldID get_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid = nullptr) {
         jfieldID fid = nullptr;
         if (pfid)
             fid = *pfid;
         if (!fid) {
-            printf("GetFieldID: %s\n", name);
             fid = env->GetFieldID(cid, name, signature_of(T()).c_str());
             if (pfid)
                 *pfid = fid;
@@ -484,7 +483,7 @@ using namespace std;
     T get_field(jobject oid, jclass cid, jfieldID* pfid, const char* name) {
         JNIEnv* env = getEnv();
         // TODO: call_on_exit?
-        jfieldID fid = get_field_id<T>(env, cid, pfid, name);
+        jfieldID fid = get_field_id<T>(env, cid, name, pfid);
         if (!fid)
             return T();
         return get_field<T>(env, oid, fid);
@@ -495,19 +494,18 @@ using namespace std;
     void set_field(jobject oid, jclass cid, jfieldID* pfid, const char* name, T&& v) {
         JNIEnv* env = getEnv();
         // TODO: call_on_exit?
-        jfieldID fid = get_field_id<T>(env, cid, pfid, name);
+        jfieldID fid = get_field_id<T>(env, cid, name, pfid);
         if (!fid)
             return;
         set_field<T>(env, oid, fid, std::forward<T>(v));
     }
 
     template<typename T>
-    jfieldID get_static_field_id(JNIEnv* env, jclass cid, jfieldID* pfid, const char* name) {
+    jfieldID get_static_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid = nullptr) {
         jfieldID fid = nullptr;
         if (pfid)
             fid = *pfid;
         if (!fid) {
-            printf("GetStaticFieldID: %s\n", name);
             fid = env->GetStaticFieldID(cid, name, signature_of(T()).c_str());
             if (pfid)
                 *pfid = fid;
@@ -519,7 +517,7 @@ using namespace std;
     template<typename T>
     T get_static_field(jclass cid, jfieldID* pfid, const char* name) {
         JNIEnv* env = getEnv();
-        jfieldID fid = get_static_field_id<T>(env, cid, pfid, name);
+        jfieldID fid = get_static_field_id<T>(env, cid, name, pfid);
         if (!fid)
             return T();
         return get_static_field<T>(env, cid, fid);
@@ -529,7 +527,7 @@ using namespace std;
     template<typename T>
     void set_static_field(jclass cid, jfieldID* pfid, const char* name, T&& v) {
         JNIEnv* env = getEnv();
-        jfieldID fid = get_static_field_id<T>(env, cid, pfid, name);
+        jfieldID fid = get_static_field_id<T>(env, cid, name, pfid);
         if (!fid)
             return;
         set_static_field<T>(env, cid, fid, std::forward<T>(v));
@@ -759,9 +757,9 @@ jfieldID JObject<CTag, V>::Field<F, MayBeFTag, isStaticField, cacheable>::cached
     static jfieldID fid = nullptr;
     if (!fid) {
         if (isStaticField)
-            fid = detail::get_static_field_id<F>(getEnv(), cid, nullptr, MayBeFTag::name());
+            fid = detail::get_static_field_id<F>(getEnv(), cid, MayBeFTag::name());
         else
-            fid = detail::get_field_id<F>(getEnv(), cid, nullptr, MayBeFTag::name());
+            fid = detail::get_field_id<F>(getEnv(), cid, MayBeFTag::name());
     }
     return fid;
 }
@@ -770,7 +768,7 @@ template<class CTag, if_ClassTag<CTag> V>
 template<typename F, class MayBeFTag, bool isStaticField, bool cacheable>
 JObject<CTag, V>::Field<F, MayBeFTag, isStaticField, cacheable>::Field(jobject oid, jclass cid, const char* name)
  : oid_(oid) {
-    fid_ = detail::get_field_id<F>(getEnv(), cid, nullptr, name);
+    fid_ = detail::get_field_id<F>(getEnv(), cid, name);
 }
 
 
@@ -778,7 +776,7 @@ template<class CTag, if_ClassTag<CTag> V>
 template<typename F, class MayBeFTag, bool isStaticField, bool cacheable>
 JObject<CTag, V>::Field<F, MayBeFTag, isStaticField, cacheable>::Field(jclass cid, const char* name)
  : cid_(cid) {
-    fid_ = detail::get_static_field_id<F>(getEnv(), cid, nullptr, name);
+    fid_ = detail::get_static_field_id<F>(getEnv(), cid, name);
 }
 
 
