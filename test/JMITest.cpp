@@ -58,19 +58,39 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	struct Y : public jmi::FieldTag { static const char* name() { return "y";}};
 	auto y = test.getStatic<Y, jint>();
 	cout << "static field JMITest::y initial value: " << y << endl;
-	if (!test.setStatic<Y>(1258)) {
+	if (!jmi::JObject<JMITest>::setStatic<Y>(1258)) {
 		cout << "static field JMITest.y set error" << endl;
 	}
 	cout << "static field JMITest.y after set: " << test.getStatic<Y, jint>() << endl;
 
 	struct SStr : public jmi::FieldTag { static const char* name() { return "sstr";}};
-	auto sstr = test.getStatic<SStr, std::string>();
+	auto sstr = jmi::JObject<JMITest>::getStatic<SStr, std::string>();
 	cout << "static field JMITest::sstr initial value: " << sstr << endl;
-	if (!test.setStatic<SStr>(std::string(":D setting static string..."))) {
+	if (!jmi::JObject<JMITest>::setStatic<SStr>(std::string(":D setting static string..."))) {
 		cout << "static field JMITest.sstr set error" << endl;
 	}
-	cout << "static field JMITest.sstr after set: " << test.getStatic<SStr, std::string>() << endl;
+	cout << "static field JMITest.sstr after set: " << jmi::JObject<JMITest>::getStatic<SStr, std::string>() << endl;
 
+	cout << ">>>>>>>>>>>>testing Cacheable StaticField APIs..." << endl;
+	auto& fsstr = jmi::JObject<JMITest>::staticField<SStr, std::string>();
+	cout << "field JMITest.sstr from cacheable StaticField object: " << fsstr.get() << endl;
+	jmi::JObject<JMITest>::staticField<SStr, std::string>();
+	fsstr = jmi::JObject<JMITest>::staticField<SStr, std::string>();
+	fsstr.set("Cacheable StaticField sstr set");
+	cout << "field JMITest.sstr from Cacheable StaticField object after set(): " << fsstr.get() << endl;
+	fsstr.set("Cacheable StaticField sstr =()");
+	cout << "field JMITest.sstr from Cacheable StaticField object after =(): " << fsstr.get() << endl;
+
+	cout << ">>>>>>>>>>>>testing Uncacheable StaticField APIs..." << endl;
+	auto ufsstr = jmi::JObject<JMITest>::staticField<std::string>("sstr");
+	cout << "field JMITest.sstr from uncacheable StaticField object: " << ufsstr.get() << endl;
+	ufsstr = jmi::JObject<JMITest>::staticField<std::string>("sstr");
+	ufsstr.set("Uncacheable StaticField sstr set");
+	cout << "field JMITest.sstr from Uncacheable StaticField object after set(): " << ufsstr.get() << endl;
+	ufsstr.set("Uncacheable StaticField sstr =()");
+	cout << "field JMITest.sstr from Uncacheable StaticField object after =(): " << ufsstr.get() << endl;
+
+	cout << ">>>>>>>>>>>>testing Cacheable field APIs..." << endl;
 	test.create();
 	struct X : public jmi::FieldTag { static const char* name() { return "x";}};
 	int x = test.get<X, jint>();
@@ -80,11 +100,32 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	}
 	cout << "field JMITest.x after set: " << test.get<X, jint>() << endl;
 
+	cout << ">>>>>>>>>>>>testing Unacheable field APIs..." << endl;
 	auto str = test.get<std::string>("str");
 	cout << "field JMITest::str initial value: " << str << endl;
 	if (!test.set("str", std::string(":D setting string..."))) {
 		cout << "field JMITest.str set error" << endl;
 	}
 	cout << "field JMITest.str after set: " << test.get<std::string>("str") << endl;
+
+	cout << ">>>>>>>>>>>>testing Cacheable Field APIs..." << endl;
+	struct Str : public jmi::FieldTag { static const char* name() { return "str";}};
+	auto fstr = test.field<Str, std::string>();
+	cout << "field JMITest.str from cacheable Field object: " << fstr.get() << endl;
+	fstr = test.field<Str, std::string>();
+	test.field<Str, std::string>();
+	fstr.set("Cacheable Field str set");
+	cout << "field JMITest.str from Cacheable Field object after set(): " << fstr.get() << endl;
+	fstr.set("Cacheable Field str =()");
+	cout << "field JMITest.str from Cacheable Field object after =(): " << fstr.get() << endl;
+
+	cout << ">>>>>>>>>>>>testing Uncacheable Field APIs..." << endl;
+	auto ufstr = test.field<std::string>("str");
+	cout << "field JMITest.str from uncacheable Field object: " << ufstr.get() << endl;
+	ufstr = test.field<std::string>("str");
+	ufstr.set("Uncacheable Field str set");
+	cout << "field JMITest.str from Uncacheable Field object after set(): " << ufstr.get() << endl;
+	ufstr.set("Uncacheable Field str =()");
+	cout << "field JMITest.str from Uncacheable Field object after =(): " << ufstr.get() << endl;
 }
 }
