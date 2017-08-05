@@ -52,5 +52,39 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	jbyte *ca = (jbyte*)"abcd";
     jstr.reset();
 	jstr.create(ca);
+
+	struct JMITest : public jmi::ClassTag { static std::string name() {return "JMITest";}};
+	jmi::JObject<JMITest> test;
+	struct Y : public jmi::FieldTag { static const char* name() { return "y";}};
+	auto y = test.getStatic<Y, jint>();
+	cout << "static field JMITest::y initial value: " << y << endl;
+	if (!test.setStatic<Y>(1258)) {
+		cout << "static field JMITest.y set error" << endl;
+	}
+	cout << "static field JMITest.y after set: " << test.getStatic<Y, jint>() << endl;
+
+	struct SStr : public jmi::FieldTag { static const char* name() { return "sstr";}};
+	auto sstr = test.getStatic<SStr, std::string>();
+	cout << "static field JMITest::sstr initial value: " << sstr << endl;
+	if (!test.setStatic<SStr>(std::string(":D setting static string..."))) {
+		cout << "static field JMITest.sstr set error" << endl;
+	}
+	cout << "static field JMITest.sstr after set: " << test.getStatic<SStr, std::string>() << endl;
+
+	test.create();
+	struct X : public jmi::FieldTag { static const char* name() { return "x";}};
+	int x = test.get<X, jint>();
+	cout << "field JMITest.x initial value: " << x << endl;
+	if (!test.set<X>(3141)) {
+		cout << "field JMITest.x set error" << endl;
+	}
+	cout << "field JMITest.x after set: " << test.get<X, jint>() << endl;
+
+	auto str = test.get<std::string>("str");
+	cout << "field JMITest::str initial value: " << str << endl;
+	if (!test.set("str", std::string(":D setting string..."))) {
+		cout << "field JMITest.str set error" << endl;
+	}
+	cout << "field JMITest.str after set: " << test.get<std::string>("str") << endl;
 }
 }

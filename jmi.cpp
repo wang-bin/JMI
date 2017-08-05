@@ -5,7 +5,6 @@
  */
 #include "jmi.h"
 #include <cassert>
-#include <algorithm>
 #include <iostream>
 #include <pthread.h>
 #if defined(__ANDROID__) || defined(ANDROID)
@@ -48,7 +47,7 @@ JNIEnv *getEnv() {
 #else
         printf(
 #endif
-        "JNI Modern Interface\n");
+        "JMI: JNI Modern Interface\n");
 
         pthread_key_create(&key_, [](void*){
             JNIEnv* env = nullptr;
@@ -147,7 +146,7 @@ jobject call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *arg
     return env->CallObjectMethodA(obj_id, methodId, args);
 }
 template<>
-double call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
+jdouble call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallDoubleMethodA(obj_id, methodId, args);
 }
 template<>
@@ -155,11 +154,11 @@ jlong call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args)
     return env->CallLongMethodA(obj_id, methodId, args);
 }
 template<>
-float call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
+jfloat call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallFloatMethodA(obj_id, methodId, args);
 }
 template<>
-int call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
+jint call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallIntMethodA(obj_id, methodId, args);
 }
 template<>
@@ -184,11 +183,11 @@ jlong call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue
     return env->CallStaticLongMethodA(classId, methodId, args);
 }
 template<>
-float call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
+jfloat call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     return env->CallStaticFloatMethodA(classId, methodId, args);
 }
 template<>
-int call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
+jint call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     return env->CallStaticIntMethodA(classId, methodId, args);
 }
 template<>
@@ -381,5 +380,172 @@ template<> void from_jarray(JNIEnv* env, const jvalue& v, double* t, std::size_t
 {
     env->GetDoubleArrayRegion(static_cast<jdoubleArray>(v.l), 0, N, t);
 }
+
+////////// Field //////////
+template<>
+jobject get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+    return env->GetObjectField(oid, fid);
+}
+template<>
+jboolean get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+    return env->GetBooleanField(oid, fid);
+}
+template<>
+jbyte get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+    return env->GetByteField(oid, fid);
+}
+template<>
+jchar get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+    return env->GetCharField(oid, fid);
+}
+template<>
+jshort get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+    return env->GetShortField(oid, fid);
+}
+template<>
+jint get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+    return env->GetIntField(oid, fid);
+}
+template<>
+jlong get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+    return env->GetLongField(oid, fid);
+}
+template<>
+jfloat get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+    return env->GetFloatField(oid, fid);
+}
+template<>
+jdouble get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+    return env->GetDoubleField(oid, fid);
+}
+template<>
+std::string get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+    return to_string((jstring)get_field<jobject>(env, oid, fid), env);
+}
+
+template<>
+void set_field(JNIEnv* env, jobject oid, jfieldID fid, jobject&& v) {
+    env->SetObjectField(oid, fid, v);
+}
+template<>
+void set_field(JNIEnv* env, jobject oid, jfieldID fid, jboolean&& v) {
+    env->SetBooleanField(oid, fid, v);
+}
+template<>
+void set_field(JNIEnv* env, jobject oid, jfieldID fid, jbyte&& v) {
+    env->SetByteField(oid, fid, v);
+}
+template<>
+void set_field(JNIEnv* env, jobject oid, jfieldID fid, jchar&& v) {
+    env->SetCharField(oid, fid, v);
+}
+template<>
+void set_field(JNIEnv* env, jobject oid, jfieldID fid, jshort&& v) {
+    env->SetShortField(oid, fid, v);
+}
+template<>
+void set_field(JNIEnv* env, jobject oid, jfieldID fid, jint&& v) {
+    env->SetIntField(oid, fid, v);
+}
+template<>
+void set_field(JNIEnv* env, jobject oid, jfieldID fid, jlong&& v) {
+    env->SetLongField(oid, fid, v);
+}
+template<>
+void set_field(JNIEnv* env, jobject oid, jfieldID fid, jfloat&& v) {
+    env->SetFloatField(oid, fid, v);
+}
+template<>
+void set_field(JNIEnv* env, jobject oid, jfieldID fid, jdouble&& v) {
+    env->SetDoubleField(oid, fid, v);
+}
+template<>
+void set_field(JNIEnv* env, jobject oid, jfieldID fid, std::string&& v) {
+    set_field(env, oid, fid, jobject(env->NewStringUTF(v.c_str()))); // DeleteLocalRef?
+}
+
+////////// Static Field //////////
+template<>
+jobject get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+    return env->GetStaticObjectField(cid, fid);
+}
+template<>
+jboolean get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+    return env->GetStaticBooleanField(cid, fid);
+}
+template<>
+jbyte get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+    return env->GetStaticByteField(cid, fid);
+}
+template<>
+jchar get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+    return env->GetStaticCharField(cid, fid);
+}
+template<>
+jshort get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+    return env->GetStaticShortField(cid, fid);
+}
+template<>
+jint get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+    return env->GetStaticIntField(cid, fid);
+}
+template<>
+jlong get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+    return env->GetStaticLongField(cid, fid);
+}
+template<>
+jfloat get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+    return env->GetStaticFloatField(cid, fid);
+}
+template<>
+jdouble get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+    return env->GetStaticDoubleField(cid, fid);
+}
+template<>
+std::string get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+    return to_string((jstring)get_static_field<jobject>(env, cid, fid), env);
+}
+
+template<>
+void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jobject&& v) {
+    env->SetStaticObjectField(cid, fid, v);
+}
+template<>
+void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jboolean&& v) {
+    env->SetStaticBooleanField(cid, fid, v);
+}
+template<>
+void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jbyte&& v) {
+    env->SetStaticByteField(cid, fid, v);
+}
+template<>
+void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jchar&& v) {
+    env->SetStaticCharField(cid, fid, v);
+}
+template<>
+void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jshort&& v) {
+    env->SetStaticShortField(cid, fid, v);
+}
+template<>
+void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jint&& v) {
+    env->SetStaticIntField(cid, fid, v);
+}
+template<>
+void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jlong&& v) {
+    env->SetStaticLongField(cid, fid, v);
+}
+template<>
+void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jfloat&& v) {
+    env->SetStaticFloatField(cid, fid, v);
+}
+template<>
+void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jdouble&& v) {
+    env->SetStaticDoubleField(cid, fid, v);
+}
+template<>
+void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, std::string&& v) {
+    set_static_field(env, cid, fid, jobject(env->NewStringUTF(v.c_str())));
+}
+
 } // namespace detail
 } //namespace jmi
