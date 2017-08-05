@@ -83,7 +83,6 @@ public:
     static void callStatic(Args&&... args);
 
     // get/set field and static field
-    // TODO: return field object (ref), operations on field object applies to java field
     template<class FTag, typename T, if_FieldTag<FTag> = true>
     T get();
     template<class FTag, typename T, if_FieldTag<FTag> = true>
@@ -116,8 +115,12 @@ public:
        Alternative Field API
        Field lifetime is bounded to JObject, it does not add object ref, when object is destroyed/reset, accessing Field will fail (TODO: how to avoid crash?)
        Use MayBeFTag to ensure jfieldID is cacheable for each field
+       Usage:
+        auto f = obj.field<int, MyFieldTag>(), obj.field<int>("MyField"), JObject<...>::staticField<string>("MySField");
+        auto& sf = JObject<...>::staticField<string, MySFieldTag>();
+        f.set(123)/get(), sf.set("test")/get();
      */
-    template<typename F, class MayBeFTag, bool cacheable = std::is_base_of<FieldTag, MayBeFTag>::value>
+    template<typename F, class MayBeFTag, bool isStaticField, bool cacheable = std::is_base_of<FieldTag, MayBeFTag>::value>
     class Field { // JObject.classId() works in Field?
     public:
         jfieldID id() const { return fid_; }
@@ -133,49 +136,33 @@ public:
         static jfieldID cachedId(jclass cid); // usually cid is used only once
         Field(jobject oid, jclass cid) : oid_(oid) { fid_ = cachedId(cid); } // it's protected so we can sure cacheable ctor will not be called for uncacheable Field
         Field(jobject oid, jclass cid, const char* name);
+        // static field
+        Field(jclass cid) : cid_(cid) { fid_ = cachedId(cid); }
+        Field(jclass cid, const char* name);
 
-        jobject oid_ = nullptr;
+        union {
+            jobject oid_;
+            jclass cid_;
+        };
         jfieldID fid_ = nullptr;
         friend class JObject<CTag>;
     };
     template<class FTag, typename T, if_FieldTag<FTag> = true>
-    Field<T, FTag> field() const {
-        return Field<T, FTag>(oid_, classId());
+    Field<T, FTag, false> field() const {
+        return Field<T, FTag, false>(oid_, classId());
     }
     template<typename T>
-    Field<T, void> field(std::string&& name) const {
-        return Field<T, void>(oid_, classId(), name.c_str());
+    Field<T, void, false> field(std::string&& name) const {
+        return Field<T, void, false>(oid_, classId(), name.c_str());
     }
-
-    template<typename F, class MayBeFTag, bool cacheable = std::is_base_of<FieldTag, MayBeFTag>::value>
-    class StaticField {
-    public:
-        jfieldID id() const { return fid_; }
-        operator jfieldID() const { return fid_; }
-        operator F() const { return get(); }
-        F get() const;
-        void set(F&& v);
-        StaticField& operator=(F&& v) {
-            set(v);
-            return *this;
-        }
-    protected:
-        static jfieldID cachedId(jclass cid); // cid is used only once
-        StaticField(jclass cid) : cid_(cid) { fid_ = cachedId(cid); }
-        StaticField(jclass cid, const char* name);
-
-        jclass cid_ = nullptr;
-        jfieldID fid_ = nullptr;
-        friend class JObject<CTag>;
-    };
     template<class FTag, typename T, if_FieldTag<FTag> = true>
-    static StaticField<T, FTag>& staticField() { // cacheable and static java storage, so returning ref is better
-        static StaticField<T, FTag> f(classId());
+    static Field<T, FTag, true>& staticField() { // cacheable and static java storage, so returning ref is better
+        static Field<T, FTag, true> f(classId());
         return f;
     }
     template<typename T>
-    static StaticField<T, void> staticField(std::string&& name) {
-        return StaticField<T, void>(classId(), name.c_str());
+    static Field<T, void, true> staticField(std::string&& name) {
+        return Field<T, void, true>(classId(), name.c_str());
     }
 private:
     static jclass classId(JNIEnv* env = nullptr);
@@ -484,6 +471,7 @@ using namespace std;
         if (pfid)
             fid = *pfid;
         if (!fid) {
+            printf("GetFieldID: %s\n", name);
             fid = env->GetFieldID(cid, name, signature_of(T()).c_str());
             if (pfid)
                 *pfid = fid;
@@ -519,6 +507,7 @@ using namespace std;
         if (pfid)
             fid = *pfid;
         if (!fid) {
+            printf("GetStaticFieldID: %s\n", name);
             fid = env->GetStaticFieldID(cid, name, signature_of(T()).c_str());
             if (pfid)
                 *pfid = fid;
@@ -739,76 +728,55 @@ bool JObject<CTag, V>::setStatic(std::string&& fieldName, T&& v) {
 }
 
 template<class CTag, if_ClassTag<CTag> V>
-template<typename F, class MayBeFTag, bool cacheable>
-F JObject<CTag, V>::Field<F, MayBeFTag, cacheable>::get() const
+template<typename F, class MayBeFTag, bool isStaticField, bool cacheable>
+F JObject<CTag, V>::Field<F, MayBeFTag, isStaticField, cacheable>::get() const
 {
     auto checker = detail::call_on_exit([=]{
         detail::handle_exception();
     });
+    if (isStaticField)
+        return detail::get_static_field<F>(getEnv(), cid_, id());
     return detail::get_field<F>(getEnv(), oid_, id());
 }
 
 template<class CTag, if_ClassTag<CTag> V>
-template<typename F, class MayBeFTag, bool cacheable>
-void JObject<CTag, V>::Field<F, MayBeFTag, cacheable>::set(F&& v)
+template<typename F, class MayBeFTag, bool isStaticField, bool cacheable>
+void JObject<CTag, V>::Field<F, MayBeFTag, isStaticField, cacheable>::set(F&& v)
 {
     auto checker = detail::call_on_exit([=]{
         detail::handle_exception();
     });
-    detail::set_field<F>(getEnv(), oid_, id(), std::forward<F>(v));
+    if (isStaticField)
+        detail::set_static_field<F>(getEnv(), cid_, id(), std::forward<F>(v));
+    else
+        detail::set_field<F>(getEnv(), oid_, id(), std::forward<F>(v));
 }
 
 template<class CTag, if_ClassTag<CTag> V>
-template<typename F, class MayBeFTag, bool cacheable>
-jfieldID JObject<CTag, V>::Field<F, MayBeFTag, cacheable>::cachedId(jclass cid)
+template<typename F, class MayBeFTag, bool isStaticField, bool cacheable>
+jfieldID JObject<CTag, V>::Field<F, MayBeFTag, isStaticField, cacheable>::cachedId(jclass cid)
 {
     static jfieldID fid = nullptr;
-    if (!fid)
-        fid = detail::get_field_id<F>(getEnv(), cid, nullptr, MayBeFTag::name());
+    if (!fid) {
+        if (isStaticField)
+            fid = detail::get_static_field_id<F>(getEnv(), cid, nullptr, MayBeFTag::name());
+        else
+            fid = detail::get_field_id<F>(getEnv(), cid, nullptr, MayBeFTag::name());
+    }
     return fid;
 }
 
 template<class CTag, if_ClassTag<CTag> V>
-template<typename F, class MayBeFTag, bool cacheable>
-JObject<CTag, V>::Field<F, MayBeFTag, cacheable>::Field(jobject oid, jclass cid, const char* name)
+template<typename F, class MayBeFTag, bool isStaticField, bool cacheable>
+JObject<CTag, V>::Field<F, MayBeFTag, isStaticField, cacheable>::Field(jobject oid, jclass cid, const char* name)
  : oid_(oid) {
     fid_ = detail::get_field_id<F>(getEnv(), cid, nullptr, name);
 }
 
 
 template<class CTag, if_ClassTag<CTag> V>
-template<typename F, class MayBeFTag, bool cacheable>
-F JObject<CTag, V>::StaticField<F, MayBeFTag, cacheable>::get() const
-{
-    auto checker = detail::call_on_exit([=]{
-        detail::handle_exception();
-    });
-    return detail::get_static_field<F>(getEnv(), cid_, id());
-}
-
-template<class CTag, if_ClassTag<CTag> V>
-template<typename F, class MayBeFTag, bool cacheable>
-void JObject<CTag, V>::StaticField<F, MayBeFTag, cacheable>::set(F&& v)
-{
-    auto checker = detail::call_on_exit([=]{
-        detail::handle_exception();
-    });
-    detail::set_static_field<F>(getEnv(), cid_, id(), std::forward<F>(v));
-}
-
-template<class CTag, if_ClassTag<CTag> V>
-template<typename F, class MayBeFTag, bool cacheable>
-jfieldID JObject<CTag, V>::StaticField<F, MayBeFTag, cacheable>::cachedId(jclass cid)
-{
-    static jfieldID fid = nullptr;
-    if (!fid)
-        fid = detail::get_static_field_id<F>(getEnv(), cid, nullptr, MayBeFTag::name());
-    return fid;
-}
-
-template<class CTag, if_ClassTag<CTag> V>
-template<typename F, class MayBeFTag, bool cacheable>
-JObject<CTag, V>::StaticField<F, MayBeFTag, cacheable>::StaticField(jclass cid, const char* name)
+template<typename F, class MayBeFTag, bool isStaticField, bool cacheable>
+JObject<CTag, V>::Field<F, MayBeFTag, isStaticField, cacheable>::Field(jclass cid, const char* name)
  : cid_(cid) {
     fid_ = detail::get_static_field_id<F>(getEnv(), cid, nullptr, name);
 }
