@@ -337,14 +337,6 @@ using namespace std;
     template<class CTag>
     jvalue to_jvalue(const JObject<CTag, true> &obj, JNIEnv* env);
     // T(&)[N]?
-#if 0
-    // can not defined as template specialization because to_jvalue(T*, JNIEnv* env) will be choosed
-    // FIXME: why clang crashes but gcc is fine? why to_jvalue(const jlong&, JNIEnv* env) works?
-    // what if use jmi::object instead of jarray?
-    jvalue to_jvalue(const jobject &obj, JNIEnv* env) { return jvalue{.l = obj};}
-    jvalue to_jvalue(const jarray &obj, JNIEnv* env) { return jvalue{.l = obj};}
-    jvalue to_jvalue(const jstring &obj, JNIEnv* env) { return jvalue{.l = obj};}
-#endif
 
     template<typename T>
     void from_jarray(JNIEnv* env, const jvalue& v, T* t, size_t N);
