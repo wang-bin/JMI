@@ -8,8 +8,19 @@ public class JMITest {
         new JMITest().nativeTest();  // invoke the native method
     }
 
-    public int x;
-    public static int y = 168;
-    public String str = "text";
-    public static String sstr = "static text";
+    public void setX(int v) { x = v;}
+    public int getX() { return x;}
+    public static void setY(int v) { y = v;}
+    public static int getY() { return y;}
+    public void setStr(String v) { str = v;}
+    public String getStr() { return str;}
+    public void getIntArray(int[] a) {
+        a[0] = 1;
+        a[1] = x;
+    }
+
+    private int x;
+    private static int y = 168;
+    private String str = "text";
+    private static String sstr = "static text";
 }

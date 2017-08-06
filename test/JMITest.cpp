@@ -2,10 +2,110 @@
 #include <jni.h>
 #include <iostream>
 #include "jmi.h"
-#include <vector>
-using namespace std;
-extern "C" {
+#include "JMITest.h"
 
+using namespace std;
+using namespace jmi;
+
+void JMITestCached::setX(int v)
+{
+	struct SetX : MethodTag { static const char* name() {return "setX";}};
+	call<SetX>(v);
+}
+
+int JMITestCached::getX() const
+{
+	struct GetX : MethodTag { static const char* name() {return "getX";}};
+	return call<int, GetX>();
+}
+
+void JMITestCached::setY(int v)
+{
+	struct Set : MethodTag { static const char* name() {return "setY";}};
+	callStatic<Set>(v);
+}
+
+int JMITestCached::getY()
+{
+	struct Get : MethodTag { static const char* name() {return "getY";}};
+	return callStatic<int, Get>();
+}
+
+void JMITestCached::setStr(const char* v)
+{
+	struct Set : MethodTag { static const char* name() {return "setStr";}};
+	call<Set>(v);
+}
+
+std::string JMITestCached::getStr() const
+{
+	struct Get : MethodTag { static const char* name() {return "getStr";}};
+	return call<std::string, Get>();
+}
+
+void JMITestCached::getIntArray(int v[2]) const
+{
+	// now v is int*
+	//int (&out)[2] = reinterpret_cast<int(&)[2]>(v);
+	int out[2];
+	struct Get : MethodTag { static const char* name() {return "getIntArray";}};
+	call<Get>(std::ref(out));
+	v[0] = out[0];
+	v[1] = out[1];
+}
+
+void JMITestCached::getIntArray(std::array<int, 2>& v) const
+{
+	struct Get : MethodTag { static const char* name() {return "getIntArray";}};
+	call<Get>(std::ref(v));
+}
+
+
+void JMITestUncached::setX(int v)
+{
+	call("setX", v);
+}
+
+int JMITestUncached::getX() const
+{
+	return call<int>("getX");
+}
+
+void JMITestUncached::setY(int v)
+{
+	callStatic("setY", v);
+}
+
+int JMITestUncached::getY()
+{
+	return callStatic<int>("getY");
+}
+
+void JMITestUncached::setStr(const string& v)
+{
+	call("setStr", v);
+}
+
+std::string JMITestUncached::getStr() const
+{
+	return call<std::string>("getStr");
+}
+
+void JMITestUncached::getIntArray(int v[2]) const
+{
+	// now v is int*
+	int out[2];
+	call("getIntArray", std::ref(out));
+	v[0] = out[0];
+	v[1] = out[1];
+}
+
+void JMITestUncached::getIntArray(std::array<int, 2>& v) const
+{
+	call("getIntArray", std::ref(v));
+}
+
+extern "C" {
 jint JNI_OnLoad(JavaVM* vm, void* reserved)
 {
 	std::cout << "JNI_OnLoad" << std::endl;
@@ -129,5 +229,37 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	cout << "field JMITest.str from Uncacheable Field object after set(): " << ufstr.get() << endl;
 	ufstr.set("Uncacheable Field str =()");
 	cout << "field JMITest.str from Uncacheable Field object after =(): " << ufstr.get() << endl;
+	
+	cout << ">>>>>>>>>>>>testing JMITestCached APIs..." << endl;
+	JMITestCached jtc;
+	JMITestCached::setY(604);
+	cout << "JMITestCached::getY: " << JMITestCached::getY() << endl;
+	if (!jtc.create())
+		cerr << "JMITestCached.create() error" << endl;
+	jtc.setX(2017);
+	cout << "JMITestCached.getX: " << jtc.getX() << endl;
+	jtc.setStr("why");
+	cout << "JMITestCached.getStr: " << jtc.getStr() << endl;
+	int a0[2]{};
+	jtc.getIntArray(a0);
+	cout << "JMITestCached.getIntArray(int[2]): [" << a0[0] << ", " << a0[1] << "]" << endl;
+	std::array<int, 2> a1;
+	jtc.getIntArray(a1);
+	cout << "JMITestCached.getIntArray(std::array<int, 2>&): [" << a1[0] << ", " << a1[1] << "]" << endl;
+
+	cout << ">>>>>>>>>>>>testing JMITestUncached APIs..." << endl;
+	JMITestUncached jtuc;
+	JMITestUncached::setY(604);
+	cout << "JMITestUncached::getY: " << JMITestUncached::getY() << endl;
+	if (!jtuc.create())
+		cerr << "JMITestUncached.create() error" << endl;
+	jtuc.setX(2017);
+	cout << "JMITestUncached.getX: " << jtuc.getX() << endl;
+	jtuc.setStr("why");
+	cout << "JMITestUncached.getStr: " << jtuc.getStr() << endl;
+	jtuc.getIntArray(a0);
+	cout << "JMITestUncached.getIntArray(int[2]): [" << a0[0] << ", " << a0[1] << "]" << endl;
+	jtuc.getIntArray(a1);
+	cout << "JMITestUncached.getIntArray(std::array<int, 2>&): [" << a1[0] << ", " << a1[1] << "]" << endl;
 }
-}
+} // extern "C"
