@@ -99,12 +99,19 @@ jstring from_string(const std::string &s, JNIEnv* env)
 {
     if (!env)
         env = getEnv();
-    jclass strClass = env->FindClass("java/lang/String");
-    jmethodID ctorID = env->GetMethodID(strClass, "<init>", "([B)V");
+    static jclass strClass = nullptr;
+    if (!strClass) {
+        jclass sc = env->FindClass("java/lang/String");
+        strClass = static_cast<jclass>(env->NewGlobalRef(sc));
+        env->DeleteLocalRef(sc);
+    }
+    static jmethodID strCtor = nullptr;
+    if (!strCtor)
+        strCtor = env->GetMethodID(strClass, "<init>", "([B)V");
     jbyteArray bytes = env->NewByteArray(s.size());
     env->SetByteArrayRegion(bytes, 0, s.size(), (jbyte*)s.data());
     jstring encoding = env->NewStringUTF("utf-8");
-    return (jstring)env->NewObject(strClass, ctorID, bytes, encoding);
+    return (jstring)env->NewObject(strClass, strCtor, bytes, encoding);
 }
 
 namespace detail {
