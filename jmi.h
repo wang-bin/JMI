@@ -72,9 +72,9 @@ public:
         return call<T, MyMethod>(args...);
     */
     template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag> = true>
-    inline T call(Args&&... args);
+    inline T call(Args&&... args) const;
     template<class MTag, typename... Args,  detail::if_MethodTag<MTag> = true>
-    inline void call(Args&&... args);
+    inline void call(Args&&... args) const;
     /* with MethodTag we can avoid calling GetStaticMethodID() in every callStatic()
         struct MyStaticMethod : jmi::MethodTag { static const char* name() { return "myStaticMethod";} };
         JObject<CT>::callStatic<R, MyStaticMethod>(args...);
@@ -86,7 +86,7 @@ public:
 
     // get/set field and static field
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
-    T get();
+    T get() const;
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
     bool set(T&& v);
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
@@ -96,16 +96,16 @@ public:
 
     // the following call()/callStatic() will always invoke GetMethodID()/GetStaticMethodID()
     template<typename T, typename... Args>
-    T call(const std::string& methodName, Args&&... args);
+    T call(const std::string& methodName, Args&&... args) const;
     template<typename... Args>
-    void call(const std::string& methodName, Args&&... args);
+    void call(const std::string& methodName, Args&&... args) const;
     template<typename T, typename... Args>
     static T callStatic(const std::string& name, Args&&... args);
     template<typename... Args>
     static void callStatic(const std::string& name, Args&&... args);
 
     template<typename T>
-    T get(std::string&& fieldName);
+    T get(std::string&& fieldName) const;
     template<typename T>
     bool set(std::string&& fieldName, T&& v);
     template<typename T>
@@ -171,7 +171,7 @@ public:
     }
 private:
     static jclass classId(JNIEnv* env = nullptr);
-    void setError(const std::string& s) {error_ = s; }
+    void setError(const std::string& s) const {error_ = s; }
     static std::string normalizeClassName(std::string&& name) {
         std::string s = std::forward<std::string>(name);
         if (s[0] == 'L' && s.back() == ';')
@@ -181,7 +181,7 @@ private:
     }
 
     jobject oid_ = nullptr;
-    std::string error_;
+    mutable std::string error_;
 };
 /*************************** JMI Public APIs End ***************************/
 
@@ -598,7 +598,7 @@ bool JObject<CTag, V>::create(Args&&... args) {
 
 template<class CTag, detail::if_ClassTag<CTag> V>
 template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
-T JObject<CTag, V>::call(Args&&... args) {
+T JObject<CTag, V>::call(Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
     static jmethodID mid = nullptr;
@@ -606,7 +606,7 @@ T JObject<CTag, V>::call(Args&&... args) {
 }
 template<class CTag, detail::if_ClassTag<CTag> V>
 template<class MTag, typename... Args,  detail::if_MethodTag<MTag>>
-void JObject<CTag, V>::call(Args&&... args) {
+void JObject<CTag, V>::call(Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
     static jmethodID mid = nullptr;
@@ -631,7 +631,7 @@ void JObject<CTag, V>::callStatic(Args&&... args) {
 
 template<class CTag, detail::if_ClassTag<CTag> V>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
-T JObject<CTag, V>::get() {
+T JObject<CTag, V>::get() const {
     static jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([=]{
         if (detail::handle_exception()) // TODO: check fid
@@ -667,14 +667,14 @@ bool JObject<CTag, V>::setStatic(T&& v) {
 
 template<class CTag, detail::if_ClassTag<CTag> V>
 template<typename T, typename... Args>
-T JObject<CTag, V>::call(const std::string &methodName, Args&&... args) {
+T JObject<CTag, V>::call(const std::string &methodName, Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
     return call_with_methodID<T>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
 }
 template<class CTag, detail::if_ClassTag<CTag> V>
 template<typename... Args>
-void JObject<CTag, V>::call(const std::string &methodName, Args&&... args) {
+void JObject<CTag, V>::call(const std::string &methodName, Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
     call_with_methodID<void>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
@@ -696,7 +696,7 @@ void JObject<CTag, V>::callStatic(const std::string &name, Args&&... args) {
 
 template<class CTag, detail::if_ClassTag<CTag> V>
 template<typename T>
-T JObject<CTag, V>::get(std::string&& fieldName) {
+T JObject<CTag, V>::get(std::string&& fieldName) const {
     jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([=]{
         if (detail::handle_exception()) // TODO: check fid
