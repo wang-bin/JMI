@@ -230,9 +230,10 @@ inline std::string signature_of(const T(&)[N]) {
 }
 
 template<template<typename, class...> class C, typename T, class... Args> struct is_jarray;
-// exclude std::basic_string etc.
 template<typename T, class... Args> struct is_jarray<std::vector, T, Args...> : public std::true_type {};
 template<typename T, class... Args> struct is_jarray<std::valarray, T, Args...> : public std::true_type {};
+// exclude std::string but not all basic_string becase no corresponding java type for wstring
+template<class... Args> struct is_jarray<std::basic_string, char, Args...> : public std::false_type {};
 template<template<typename, class...> class C, typename T, class... Args> using if_jarray = typename std::enable_if<is_jarray<C, T, Args...>::value, bool>::type;
 template<template<typename, class...> class C, typename T, class... Args, if_jarray<C, T, Args...> = true>
 inline std::string signature_of(const C<T, Args...>&) {
@@ -328,7 +329,8 @@ using namespace std;
     template<typename T> jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr);
     template<typename T> jvalue to_jvalue(T *obj, JNIEnv* env) { return to_jvalue((jlong)obj, env); } // jobject is _jobject*?
     jvalue to_jvalue(const char* obj, JNIEnv* env);// { return to_jvalue(string(obj)); }
-    template<template<typename,class...> class C, typename T, class... A> jvalue to_jvalue(const C<T, A...> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
+    template<template<typename,class...> class C, typename T, class... A, if_jarray<C, T, A...> = true> // if_jarray: exclude std::string, jarray works (copy chars)
+    jvalue to_jvalue(const C<T, A...> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
     template<typename T, size_t N> jvalue to_jvalue(const array<T, N> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
     template<typename C> jvalue to_jvalue(const reference_wrapper<C>& c, JNIEnv* env) { return to_jvalue(to_jarray(env, c.get(), true), env); }
     template<typename T, size_t N> jvalue to_jvalue(const reference_wrapper<T[N]>& c, JNIEnv* env) { return to_jvalue(to_jarray<T,N>(env, c.get(), true), env); }
