@@ -352,15 +352,18 @@ using namespace std;
         else
             from_jarray(env, v, t, n);
     }
-    template<template<typename,class...> class C, typename T, class... A> void from_jvalue(JNIEnv* env, const jvalue& v, C<T, A...> &t) { from_jarray(env, v, &t[0], t.size()); }
+    template<template<typename,class...> class C, typename T, class... A, if_jarray<C, T, A...> = true> // if_jarray: exclude std::string. jarray works too (copy chars)
+    void from_jvalue(JNIEnv* env, const jvalue& v, C<T, A...> &t) { from_jarray(env, v, &t[0], t.size()); }
     template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, array<T, N> &t) { return from_jarray(env, v, t.data(), N); }
     //template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { return from_jarray(env, v, t, N); }
 
-    // TODO: object array must DeleteLocalRef every element
+    template<typename T> struct has_local_ref {
+        static const bool value = !is_fundamental<T>::value && !is_pointer<T>::value; // TODO: && not JObject
+    };
     template<typename T>
     void set_ref_from_jvalue(JNIEnv* env, jvalue* jargs, T) {
         using Tn = typename remove_reference<T>::type;
-        if (!is_fundamental<Tn>::value && !is_pointer<Tn>::value)
+        if (has_local_ref<Tn>::value)
             env->DeleteLocalRef(jargs->l);
     }
     static inline void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, const char* s) {
@@ -370,13 +373,34 @@ using namespace std;
     void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<T> ref) {
         from_jvalue(env, *jargs, ref.get());
         using Tn = typename remove_reference<T>::type;
-        if (!is_fundamental<Tn>::value && !is_pointer<Tn>::value)
+        if (has_local_ref<Tn>::value)
             env->DeleteLocalRef(jargs->l);
+    }
+    static inline void delete_array_local_ref(JNIEnv* env, jarray a, size_t n, bool delete_elements) {
+        if (delete_elements) {
+            for (jsize i = 0; i < n; ++i) {
+                jobject ei = env->GetObjectArrayElement(jobjectArray(a), i);
+                if (ei)
+                    env->DeleteLocalRef(ei);
+            }
+        }
+        env->DeleteLocalRef(a);
+    }
+    template<template<typename,class...> class C, typename T, class... A, if_jarray<C, T, A...> = true> // if_jarray: exclude std::string, jarray works (copy chars)
+    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<C<T, A...>> ref) {
+        from_jvalue(env, *jargs, ref.get());
+        using Tn = typename remove_reference<T>::type;
+        delete_array_local_ref(env, static_cast<jarray>(jargs->l), ref.get().size(), has_local_ref<Tn>::value);
     }
     template<typename T, size_t N>
     void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<T[N]> ref) {
         from_jvalue(env, *jargs, ref.get(), N); // assume only T* and T[N]
-        env->DeleteLocalRef(jargs->l);
+        delete_array_local_ref(env, static_cast<jarray>(jargs->l), N, has_local_ref<T>::value);
+    }
+    template<typename T, size_t N>
+    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<array<T, N>> ref) {
+        from_jvalue(env, *jargs, &ref.get()[0], N); // assume only T* and T[N]
+        delete_array_local_ref(env, static_cast<jarray>(jargs->l), N, has_local_ref<T>::value);
     }
 
     static inline void ref_args_from_jvalues(JNIEnv* env, jvalue*) {}

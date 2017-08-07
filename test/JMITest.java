@@ -1,3 +1,5 @@
+import java.lang.StringBuffer;
+
 public class JMITest {
     static {
         System.loadLibrary("JMITest");
@@ -14,6 +16,9 @@ public class JMITest {
     public static int getY() { return y;}
     public void setStr(String v) { str = v;}
     public String getStr() { return str;}
+    public static void getSStr(String[] s) {
+        s[0] = " output  String[]";
+    }
     public void getIntArray(int[] a) {
         a[0] = 1;
         a[1] = x;

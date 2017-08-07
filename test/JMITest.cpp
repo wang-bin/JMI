@@ -43,6 +43,12 @@ std::string JMITestCached::getStr() const
 	return call<std::string, Get>();
 }
 
+void JMITestCached::getSStr(std::array<std::string,1>& v)
+{
+	struct Get : MethodTag { static const char* name() {return "getSStr";}};
+	return callStatic<Get>(std::ref(v));
+}
+
 void JMITestCached::getIntArray(int v[2]) const
 {
 	// now v is int*
@@ -246,6 +252,9 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	std::array<int, 2> a1;
 	jtc.getIntArray(a1);
 	cout << "JMITestCached.getIntArray(std::array<int, 2>&): [" << a1[0] << ", " << a1[1] << "]" << endl;
+	array<std::string,1> outs;
+	JMITestCached::getSStr(outs);
+	cout << "JMITestCached.getSStr(std::string&): " << outs[0] << endl;
 
 	cout << ">>>>>>>>>>>>testing JMITestUncached APIs..." << endl;
 	JMITestUncached jtuc;

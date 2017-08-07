@@ -10,7 +10,8 @@ public:
     static int getY();
     void setStr(const char* v);
     std::string getStr() const;
-
+    // java array is of fixed size
+    static void getSStr(std::array<std::string,1>& v);
     void getIntArray(int v[2]) const;
     void getIntArray(std::array<int, 2>& v) const;
 };

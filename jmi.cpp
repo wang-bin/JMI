@@ -252,7 +252,7 @@ jarray make_jarray(JNIEnv *env, const jdouble&, size_t size) {
 }
 template<>
 jarray make_jarray(JNIEnv *env, const std::string&, size_t size) {
-    return env->NewObjectArray(size, env->FindClass("java/lang/String"), 0);
+    return env->NewObjectArray(size, env->FindClass("java/lang/String"), nullptr);
 }
 template<>
 jarray make_jarray(JNIEnv *env, const char&, size_t size) {
