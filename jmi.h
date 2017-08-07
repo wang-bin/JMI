@@ -21,6 +21,7 @@ namespace jmi {
 JavaVM* javaVM(JavaVM *vm = nullptr, jint version = JNI_VERSION_1_4);
 JNIEnv *getEnv();
 std::string to_string(jstring s, JNIEnv* env = nullptr);
+// You have to call DeleteLocalRef() manually for the returned jstring
 jstring from_string(const std::string& s, JNIEnv* env = nullptr);
 
 struct ClassTag {}; // used by JObject<Tag>. subclasses must define static std::string() name(), with or without "L ;" around
@@ -321,7 +322,7 @@ using namespace std;
     jarray to_jarray(JNIEnv* env, const T(&c)[N], bool is_ref = false) {
         return to_jarray(env, c[0], N, is_ref);
     }
-    template<typename C> // c++ container (vector, valarray, array) to jarray
+    template<typename C> // c++ container (vector, valarray, array) to jarray. no if_jarray check (requires overload for both vector like and array like containers) because it's checked by to_jvalue
     jarray to_jarray(JNIEnv* env, const C &c, bool is_ref = false) {
         return to_jarray(env, c[0], c.size(), is_ref);
     }
@@ -332,7 +333,10 @@ using namespace std;
     template<template<typename,class...> class C, typename T, class... A, if_jarray<C, T, A...> = true> // if_jarray: exclude std::string, jarray works (copy chars)
     jvalue to_jvalue(const C<T, A...> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
     template<typename T, size_t N> jvalue to_jvalue(const array<T, N> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
-    template<typename C> jvalue to_jvalue(const reference_wrapper<C>& c, JNIEnv* env) { return to_jvalue(to_jarray(env, c.get(), true), env); }
+
+    template<typename T> jvalue to_jvalue(const reference_wrapper<T>& t, JNIEnv* env) { return to_jvalue(t.get(), env); }
+    template<template<typename,class...> class C, typename T, class... A, if_jarray<C, T, A...> = true> // if_jarray: exclude std::string, jarray works (copy chars)
+    jvalue to_jvalue(const reference_wrapper<C<T, A...>>& c, JNIEnv* env) { return to_jvalue(to_jarray(env, c.get(), true), env); }
     template<typename T, size_t N> jvalue to_jvalue(const reference_wrapper<T[N]>& c, JNIEnv* env) { return to_jvalue(to_jarray<T,N>(env, c.get(), true), env); }
     template<class CTag>
     jvalue to_jvalue(const JObject<CTag, true> &obj, JNIEnv* env);
@@ -352,6 +356,7 @@ using namespace std;
     template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, array<T, N> &t) { return from_jarray(env, v, t.data(), N); }
     //template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { return from_jarray(env, v, t, N); }
 
+    // TODO: object array must DeleteLocalRef every element
     template<typename T>
     void set_ref_from_jvalue(JNIEnv* env, jvalue* jargs, T) {
         using Tn = typename remove_reference<T>::type;
