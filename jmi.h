@@ -3,7 +3,7 @@
  * Copyright (C) 2016-2017 Wang Bin - wbsecg1@gmail.com
  * MIT License
  */
-// TODO: hidden inline; reset error before each call, reset exception after each call (Aspect pattern?)
+// TODO: object array; reset error before each call, reset exception after each call (Aspect pattern?)
 #pragma once
 #include <algorithm>
 #include <array>
@@ -334,7 +334,7 @@ using namespace std;
     jvalue to_jvalue(const C<T, A...> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
     template<typename T, size_t N> jvalue to_jvalue(const array<T, N> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
 
-    template<typename T> jvalue to_jvalue(const reference_wrapper<T>& t, JNIEnv* env) { return to_jvalue(t.get(), env); }
+    template<typename T> jvalue to_jvalue(const reference_wrapper<T>& t, JNIEnv* env) { return to_jvalue(t.get(), env); } // TODO: no jvalue set
     template<template<typename,class...> class C, typename T, class... A, if_jarray<C, T, A...> = true> // if_jarray: exclude std::string, jarray works (copy chars)
     jvalue to_jvalue(const reference_wrapper<C<T, A...>>& c, JNIEnv* env) { return to_jvalue(to_jarray(env, c.get(), true), env); }
     template<typename T, size_t N> jvalue to_jvalue(const reference_wrapper<T[N]>& c, JNIEnv* env) { return to_jvalue(to_jarray<T,N>(env, c.get(), true), env); }

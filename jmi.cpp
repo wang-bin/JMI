@@ -99,19 +99,7 @@ jstring from_string(const std::string &s, JNIEnv* env)
 {
     if (!env)
         env = getEnv();
-    static jclass strClass = nullptr;
-    if (!strClass) {
-        jclass sc = env->FindClass("java/lang/String");
-        strClass = static_cast<jclass>(env->NewGlobalRef(sc));
-        env->DeleteLocalRef(sc);
-    }
-    static jmethodID strCtor = nullptr;
-    if (!strCtor)
-        strCtor = env->GetMethodID(strClass, "<init>", "([B)V");
-    jbyteArray bytes = env->NewByteArray(s.size());
-    env->SetByteArrayRegion(bytes, 0, s.size(), (jbyte*)s.data());
-    jstring encoding = env->NewStringUTF("utf-8");
-    return (jstring)env->NewObject(strClass, strCtor, bytes, encoding);
+    return env->NewStringUTF(s.c_str());
 }
 
 namespace detail {
@@ -223,7 +211,7 @@ template<> jvalue to_jvalue(const std::string &obj, JNIEnv* env) {
     return to_jvalue(obj.c_str(), env);
 }
 jvalue to_jvalue(const char* s, JNIEnv* env) {
-    return to_jvalue(env->NewStringUTF(s), env);
+    return to_jvalue(env->NewStringUTF(s), env); // local ref will be deleted in set_ref_from_jvalue
 }
 
 template<>
@@ -321,28 +309,25 @@ void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jdoubl
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const std::string &elm) {
-    jobject obj = env->NewStringUTF(elm.c_str());
-    set_jarray(env, arr, position, n, obj);
+    for (size_t i = 0; i < n; ++i) {
+        const string& s = *(&elm + i);
+        set_jarray(env, arr, position + i, 1, (jobject)from_string(s, env));
+    }
 }
 
+template<> void from_jvalue(JNIEnv*, const jvalue& v, jlong& t) { t = v.j;}
 template<> void from_jvalue(JNIEnv*, const jvalue& v, jboolean& t) { t = v.z;}
 template<> void from_jvalue(JNIEnv*, const jvalue& v, jbyte& t) { t = v.b;}
 template<> void from_jvalue(JNIEnv*, const jvalue& v, jchar& t) { t = v.c;}
 template<> void from_jvalue(JNIEnv*, const jvalue& v, jshort& t) { t = v.s;}
 template<> void from_jvalue(JNIEnv*, const jvalue& v, jint& t) { t = v.i;}
-template<> void from_jvalue(JNIEnv*, const jvalue& v, jlong& t) { t = v.j;}
 template<> void from_jvalue(JNIEnv*, const jvalue& v, jfloat& t) { t = v.f;}
 template<> void from_jvalue(JNIEnv*, const jvalue& v, jdouble& t) { t = v.d;}
 template<> void from_jvalue(JNIEnv* env, const jvalue& v, std::string& t)
 {
     if (!env)
         env = getEnv();
-    const jstring s = static_cast<jstring>(v.l);
-    const char* cs = env->GetStringUTFChars(s, 0);
-    if (!cs)
-        return;
-    t = cs;
-    env->ReleaseStringUTFChars(s, cs);
+    t = to_string(static_cast<jstring>(v.l), env);
 }
 
 template<> void from_jarray(JNIEnv* env, const jvalue& v, jboolean* t, std::size_t N)
@@ -380,6 +365,14 @@ template<> void from_jarray(JNIEnv* env, const jvalue& v, double* t, std::size_t
 template<> void from_jarray(JNIEnv* env, const jvalue& v, char* t, std::size_t N)
 {
     env->GetByteArrayRegion(static_cast<jbyteArray>(v.l), 0, N, (jbyte*)t);
+}
+template<> void from_jarray(JNIEnv* env, const jvalue& v, std::string* t, std::size_t N)
+{
+    for (size_t i = 0; i < N; ++i) {
+        jobject s = env->GetObjectArrayElement(static_cast<jobjectArray>(v.l), i);
+        *(t + i) = to_string(jstring(s));
+        env->DeleteLocalRef(s);
+    }
 }
 
 ////////// Field //////////
@@ -462,7 +455,9 @@ void set_field(JNIEnv* env, jobject oid, jfieldID fid, jdouble&& v) {
 }
 template<>
 void set_field(JNIEnv* env, jobject oid, jfieldID fid, std::string&& v) {
-    set_field(env, oid, fid, jobject(env->NewStringUTF(v.c_str()))); // DeleteLocalRef?
+    jstring js = from_string(v, env);
+    set_field(env, oid, fid, jobject(js));
+    env->DeleteLocalRef(js);
 }
 
 ////////// Static Field //////////
@@ -545,7 +540,9 @@ void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jdouble&& v) {
 }
 template<>
 void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, std::string&& v) {
-    set_static_field(env, cid, fid, jobject(env->NewStringUTF(v.c_str())));
+    jstring js = from_string(v);
+    set_static_field(env, cid, fid, jobject(js));
+    env->DeleteLocalRef(js);
 }
 } // namespace detail
 } //namespace jmi
