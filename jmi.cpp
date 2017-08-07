@@ -315,20 +315,8 @@ void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const std::s
     }
 }
 
+// no need to specialize other types(jchar, jint etc.) because java parameters are passed by value but not reference. specialize jobject, jarray is ok, now we use jlong for them
 template<> void from_jvalue(JNIEnv*, const jvalue& v, jlong& t) { t = v.j;}
-template<> void from_jvalue(JNIEnv*, const jvalue& v, jboolean& t) { t = v.z;}
-template<> void from_jvalue(JNIEnv*, const jvalue& v, jbyte& t) { t = v.b;}
-template<> void from_jvalue(JNIEnv*, const jvalue& v, jchar& t) { t = v.c;}
-template<> void from_jvalue(JNIEnv*, const jvalue& v, jshort& t) { t = v.s;}
-template<> void from_jvalue(JNIEnv*, const jvalue& v, jint& t) { t = v.i;}
-template<> void from_jvalue(JNIEnv*, const jvalue& v, jfloat& t) { t = v.f;}
-template<> void from_jvalue(JNIEnv*, const jvalue& v, jdouble& t) { t = v.d;}
-template<> void from_jvalue(JNIEnv* env, const jvalue& v, std::string& t)
-{
-    if (!env)
-        env = getEnv();
-    t = to_string(static_cast<jstring>(v.l), env);
-}
 
 template<> void from_jarray(JNIEnv* env, const jvalue& v, jboolean* t, std::size_t N)
 {
