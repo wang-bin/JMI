@@ -51,7 +51,7 @@ public:
     }
     static const std::string signature() {return "L" + className() + ";";}
 
-    JObject() {} // TODO: from jobject
+    JObject(jobject obj = nullptr) : oid_(obj) { reset(obj); }
     ~JObject() { reset(); }
     JObject(const JObject &other) { *this = other; }
     JObject &operator=(const JObject &other);
@@ -63,7 +63,7 @@ public:
     jobject id() const { return oid_; }
     explicit operator bool() const { return !!oid_;}
     std::string error() const {return error_;}
-    void reset(JNIEnv *env = nullptr);
+    void reset(jobject obj = nullptr, JNIEnv *env = nullptr);
 
     template<typename... Args>
     bool create(Args&&... args);
@@ -565,15 +565,13 @@ JObject<CTag, V>& JObject<CTag, V>::operator=(const JObject &other) {
     if (this == &other)
         return *this;
     JNIEnv *env = getEnv();
-    reset(env);
-    if (other.id())
-        oid_ = env->NewGlobalRef(other.id());
+    reset(other.id(), env);
     setError(other.error());
     return *this;
 }
 
 template<class CTag, detail::if_ClassTag<CTag> V>
-void JObject<CTag, V>::reset(JNIEnv *env) {
+void JObject<CTag, V>::reset(jobject obj, JNIEnv *env) {
     error_.clear();
     if (!env) {
         env = getEnv();
@@ -583,6 +581,8 @@ void JObject<CTag, V>::reset(JNIEnv *env) {
     if (oid_)
         env->DeleteGlobalRef(oid_);
     oid_ = nullptr;
+    if (obj)
+        oid_ = env->NewGlobalRef(obj);
 }
 
 template<class CTag, detail::if_ClassTag<CTag> V>
