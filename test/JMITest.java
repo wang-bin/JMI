@@ -31,4 +31,5 @@ public class JMITest {
     private static int y = 168;
     private String str = "text";
     private static String sstr = "static text";
+    public JMITest self = this;
 }

@@ -45,7 +45,7 @@ using if_not_JObject = typename std::enable_if<!is_JObject<T>::value, bool>::typ
 template<typename T> struct signature;
 
 // object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
-template<class CTag, detail::if_ClassTag<CTag> = true> // TODO: remove if_ClassTag check, so we can define a subclass using CRTP: MyObject : public JObject<MyObject> { static std::string name() {...}};
+template<class CTag, detail::if_ClassTag<CTag> = true> // remove if_ClassTag check to support CRTP? MyObject : public JObject<MyObject> { static std::string name() {...}};, but classes like JObject<int> will be allowed, also different CRTP classes for the same java class will have own instantiations 
 class JObject : public ClassTag
 {
 public:
@@ -120,15 +120,16 @@ public:
     static bool setStatic(std::string&& fieldName, T&& v);
 
     /*
-       Alternative Field API
+        Field API
        Field lifetime is bounded to JObject, it does not add object ref, when object is destroyed/reset, accessing Field will fail (TODO: how to avoid crash?)
        Use MayBeFTag to ensure jfieldID is cacheable for each field
        Usage:
         auto f = obj.field<int, MyFieldTag>(), obj.field<int>("MyField"), JObject<...>::staticField<string>("MySField");
         auto& sf = JObject<...>::staticField<string, MySFieldTag>();
         f.set(123)/get(), sf.set("test")/get();
+        f = 345; int fv = f;
      */
-    // TODO: F can be supported types(jint primitives and JObject), ClassTag
+    // F can be supported types: jni primitives(jint, jlong, ... not jobject because we can't know class name) and JObject
     template<typename F, class MayBeFTag, bool isStaticField, bool cacheable = std::is_base_of<FieldTag, MayBeFTag>::value>
     class Field { // JObject.classId() works in Field?
     public:
@@ -136,8 +137,6 @@ public:
         operator jfieldID() const { return fid_; }
         operator F() const { return get(); }
         F get() const;
-        //template<typename std::enable_if<std::is_base_of<ClassTag,F>::value, bool> = true>
-        //JObject<F> get() const;
         void set(F&& v);
         Field& operator=(F&& v) {
             set(v);
@@ -425,7 +424,7 @@ using namespace std;
     template<class T, if_JObject<T> = true>
     T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args) {
         T t;
-        t.reset(call_method<jobject>(env, oid, mid, args));
+        t.reset(call_method<jobject>(env, oid, mid, args), env);
         return t;
     }
 
@@ -442,7 +441,7 @@ using namespace std;
     template<class T, if_JObject<T> = true>
     T call_static_method(JNIEnv *env, jclass cid, jmethodID mid, jvalue *args) {
         T t;
-        t.reset(call_static_method<jobject>(env, cid, mid, args));
+        t.reset(call_static_method<jobject>(env, cid, mid, args), env);
         return t;
     }
     template<typename T, typename... Args>
@@ -523,8 +522,14 @@ using namespace std;
         }
         return fid;
     }
-    template<typename T>
+    template<class T, if_not_JObject<T> = true>
     T get_field(JNIEnv* env, jobject oid, jfieldID fid);
+    template<class T, if_JObject<T> = true>
+    T get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+        T t;
+        t.reset(env->GetObjectField(oid, fid), env);
+        return t;
+    }
     template<typename T>
     T get_field(jobject oid, jclass cid, jfieldID* pfid, const char* name) {
         JNIEnv* env = getEnv();
@@ -534,7 +539,7 @@ using namespace std;
             return T();
         return get_field<T>(env, oid, fid);
     }
-    template<typename T>
+    template<class T>
     void set_field(JNIEnv* env, jobject oid, jfieldID fid, T&& v);
     template<typename T>
     void set_field(jobject oid, jclass cid, jfieldID* pfid, const char* name, T&& v) {
@@ -558,8 +563,14 @@ using namespace std;
         }
         return fid;
     }
-    template<typename T>
+    template<typename T, if_not_JObject<T> = true>
     T get_static_field(JNIEnv* env, jclass cid, jfieldID fid);
+    template<class T, if_JObject<T> = true>
+    T get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+        T t;
+        t.reset(env->GetObjectField(cid, fid), env);
+        return t;
+    }
     template<typename T>
     T get_static_field(jclass cid, jfieldID* pfid, const char* name) {
         JNIEnv* env = getEnv();
@@ -880,10 +891,5 @@ template<class CTag>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const JObject<CTag> &elm) {
     set_jarray(env, arr, position, n, jobject(elm));
 }
-/*
-template<class CTag>
-JObject<CTag> get_field(JNIEnv* env, jobject oid, jfieldID fid);
-template<class CTag>
-JObject<CTag> get_static_field(JNIEnv* env, jclass cid, jfieldID fid);*/
 } //namespace detail
 } //namespace jmi
