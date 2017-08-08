@@ -66,6 +66,12 @@ void JMITestCached::getIntArray(std::array<int, 2>& v) const
 	call<Get>(std::ref(v));
 }
 
+JMITestCached JMITestCached::getSelf() const
+{
+	struct Get : MethodTag { static const char* name() {return "getSelf";}};
+	return call<JMITestCached, Get>();
+}
+
 
 void JMITestUncached::setX(int v)
 {
@@ -255,6 +261,10 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	array<std::string,1> outs;
 	JMITestCached::getSStr(outs);
 	cout << "JMITestCached.getSStr(std::string&): " << outs[0] << endl;
+	JMITestCached jtc_copy = jtc.getSelf();
+	cout << "JMITestCached.getSelf().getX(): " << jtc_copy.getX() << endl;
+	jtc.setX(1231);
+	cout << "JMITestCached.getSelf().getX() after JMITestCached.setX(1231): " << jtc_copy.getX() << endl;
 
 	cout << ">>>>>>>>>>>>testing JMITestUncached APIs..." << endl;
 	JMITestUncached jtuc;

@@ -23,6 +23,9 @@ public class JMITest {
         a[0] = 1;
         a[1] = x;
     }
+    public JMITest getSelf() {
+        return this;
+    }
 
     private int x;
     private static int y = 168;

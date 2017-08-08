@@ -14,6 +14,7 @@ public:
     static void getSStr(std::array<std::string,1>& v);
     void getIntArray(int v[2]) const;
     void getIntArray(std::array<int, 2>& v) const;
+    JMITestCached getSelf() const;
 };
 
 class JMITestUncached : public jmi::JObject<JMITestClassTag>

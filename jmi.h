@@ -34,17 +34,22 @@ template<class Tag>
 using  if_MethodTag = typename std::enable_if<std::is_base_of<MethodTag, Tag>::value, bool>::type;
 template<class Tag>
 using if_FieldTag = typename std::enable_if<std::is_base_of<FieldTag, Tag>::value, bool>::type;
+template<class T> struct is_JObject : std::is_base_of<ClassTag, T>::type {}; // TODO: is_detected<signature>
+template<class T>
+using if_JObject = typename std::enable_if<is_JObject<T>::value, bool>::type;
+template<class T>
+using if_not_JObject = typename std::enable_if<!is_JObject<T>::value, bool>::type;
 }
-template<class CTag, detail::if_ClassTag<CTag>> class JObject;
 //template<typename T> // jni primitive types(not all fundamental types), jobject, jstring, ..., JObject, c++ array types
 //using if_jni_type = typename std::enable_if<std::is_fundamental<T>::value || if_array<T>::value ||
 template<typename T> struct signature;
 
 // object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
-template<class CTag, detail::if_ClassTag<CTag> = true>
-class JObject
+template<class CTag, detail::if_ClassTag<CTag> = true> // TODO: remove if_ClassTag check, so we can define a subclass using CRTP: MyObject : public JObject<MyObject> { static std::string name() {...}};
+class JObject : public ClassTag
 {
 public:
+    typedef CTag Tag;
     static const std::string className() {
         static std::string s(normalizeClassName(CTag::name()));
         return s;
@@ -63,7 +68,7 @@ public:
     jobject id() const { return oid_; }
     explicit operator bool() const { return !!oid_;}
     std::string error() const {return error_;}
-    void reset(jobject obj = nullptr, JNIEnv *env = nullptr);
+    JObject& reset(jobject obj = nullptr, JNIEnv *env = nullptr);
 
     template<typename... Args>
     bool create(Args&&... args);
@@ -172,7 +177,10 @@ public:
     }
 private:
     static jclass classId(JNIEnv* env = nullptr);
-    void setError(const std::string& s) const {error_ = s; }
+    JObject& setError(const std::string& s) const {
+        error_ = s;
+        return *const_cast<JObject*>(this);
+    }
     static std::string normalizeClassName(std::string&& name) {
         std::string s = std::forward<std::string>(name);
         if (s[0] == 'L' && s.back() == ';')
@@ -189,6 +197,8 @@ private:
 /*************************** Below is JMI implementation and internal APIs***************************/
 template<class CTag>
 inline std::string signature_of(const JObject<CTag>& t) { return t.signature();}
+template<class T, detail::if_JObject<T> = true>
+inline std::string signature_of(const T& t) { return t.signature();}
 
 //signature_of_args<decltype(Args)...>::value, template<typename ...A> struct signature_of_args?
 
@@ -208,7 +218,7 @@ template<> struct signature<char*> { constexpr static const char* value = "Ljava
 template<typename T> using if_pointer = typename std::enable_if<std::is_pointer<T>::value, bool>::type;
 template<typename T> using if_not_pointer = typename std::enable_if<!std::is_pointer<T>::value, bool>::type;
 template<typename T> using if_array = typename std::enable_if<std::is_array<T>::value, bool>::type;
-template<typename T, if_not_pointer<T> = true>
+template<typename T, if_not_pointer<T> = true, detail::if_not_JObject<T> = true>
 inline std::string signature_of(const T&) {
     return {signature<T>::value}; // initializer supports both char and char*
 }
@@ -410,10 +420,14 @@ using namespace std;
         ref_args_from_jvalues(env, jargs + 1, forward<Args>(args)...);
     }
 
-    template<typename T>
+    template<typename T, if_not_JObject<T> = true>
     T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args);
-    template<class CTag>
-    JObject<CTag, true> call_method(JNIEnv *env, jobject obj, jmethodID methodId, jvalue *args);
+    template<class T, if_JObject<T> = true>
+    T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args) {
+        T t;
+        t.reset(call_method<jobject>(env, oid, mid, args));
+        return t;
+    }
 
     template<typename T, typename... Args>
     T call_method_set_ref(JNIEnv *env, jobject oid, jmethodID mid, jvalue *jargs, Args&&... args) {
@@ -423,8 +437,14 @@ using namespace std;
        return call_method<T>(env, oid, mid, jargs);
     }
 
-    template<typename T>
+    template<typename T, if_not_JObject<T> = true>
     T call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args);
+    template<class T, if_JObject<T> = true>
+    T call_static_method(JNIEnv *env, jclass cid, jmethodID mid, jvalue *args) {
+        T t;
+        t.reset(call_static_method<jobject>(env, cid, mid, args));
+        return t;
+    }
     template<typename T, typename... Args>
     T call_static_method_set_ref(JNIEnv *env, jclass cid, jmethodID mid, jvalue *jargs, Args&&... args) {
         auto setter = call_on_exit([=]{
@@ -565,24 +585,23 @@ JObject<CTag, V>& JObject<CTag, V>::operator=(const JObject &other) {
     if (this == &other)
         return *this;
     JNIEnv *env = getEnv();
-    reset(other.id(), env);
-    setError(other.error());
-    return *this;
+    return reset(other.id(), env).setError(other.error());
 }
 
 template<class CTag, detail::if_ClassTag<CTag> V>
-void JObject<CTag, V>::reset(jobject obj, JNIEnv *env) {
+JObject<CTag,V>& JObject<CTag, V>::reset(jobject obj, JNIEnv *env) {
     error_.clear();
     if (!env) {
         env = getEnv();
         if (!env)
-            return;
+            return setError("Invalid JNIEnv");
     }
     if (oid_)
         env->DeleteGlobalRef(oid_);
     oid_ = nullptr;
     if (obj)
         oid_ = env->NewGlobalRef(obj);
+    return *this;
 }
 
 template<class CTag, detail::if_ClassTag<CTag> V>
@@ -863,17 +882,8 @@ void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const JObjec
 }
 /*
 template<class CTag>
-JObject<CTag> call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args) {
-    return call_method<jobject>(env, oid, mid, args);
-}
-template<class CTag>
-JObject<CTag call_static_method(JNIEnv *env, jclass cid, jmethodID mid, jvalue *args) {
-    return call_static_method<jobject>(env, cid, mid, args);
-}
-template<class CTag>
 JObject<CTag> get_field(JNIEnv* env, jobject oid, jfieldID fid);
 template<class CTag>
-JObject<CTag> get_static_field(JNIEnv* env, jclass cid, jfieldID fid);
-*/
+JObject<CTag> get_static_field(JNIEnv* env, jclass cid, jfieldID fid);*/
 } //namespace detail
 } //namespace jmi
