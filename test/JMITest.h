@@ -18,9 +18,10 @@ public:
     void getSelfArray(std::array<JMITestCached,2>& v) const;
 };
 
-class JMITestUncached : public jmi::JObject<JMITestClassTag>
+class JMITestUncached
 {
 public:
+    bool create() { return obj.create(); } // DO NOT forget to call it
     void setX(int v);
     int getX() const;
     static void setY(int v);
@@ -30,4 +31,6 @@ public:
 
     void getIntArray(int v[2]) const;
     void getIntArray(std::array<int, 2>& v) const;
+private:
+    jmi::JObject<JMITestClassTag> obj;
 };

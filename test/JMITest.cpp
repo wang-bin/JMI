@@ -81,46 +81,46 @@ void JMITestCached::getSelfArray(array<JMITestCached,2> &v) const
 
 void JMITestUncached::setX(int v)
 {
-	call("setX", v);
+	obj.call("setX", v);
 }
 
 int JMITestUncached::getX() const
 {
-	return call<int>("getX");
+	return obj.call<int>("getX");
 }
 
 void JMITestUncached::setY(int v)
 {
-	callStatic("setY", v);
+	JObject<JMITestClassTag>::callStatic("setY", v);
 }
 
 int JMITestUncached::getY()
 {
-	return callStatic<int>("getY");
+	return JObject<JMITestClassTag>::callStatic<int>("getY");
 }
 
 void JMITestUncached::setStr(const string& v)
 {
-	call("setStr", v);
+	obj.call("setStr", v);
 }
 
 std::string JMITestUncached::getStr() const
 {
-	return call<std::string>("getStr");
+	return obj.call<std::string>("getStr");
 }
 
 void JMITestUncached::getIntArray(int v[2]) const
 {
 	// now v is int*
 	int out[2];
-	call("getIntArray", std::ref(out));
+	obj.call("getIntArray", std::ref(out));
 	v[0] = out[0];
 	v[1] = out[1];
 }
 
 void JMITestUncached::getIntArray(std::array<int, 2>& v) const
 {
-	call("getIntArray", std::ref(v));
+	obj.call("getIntArray", std::ref(v));
 }
 
 extern "C" {
