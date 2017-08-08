@@ -26,6 +26,10 @@ public class JMITest {
     public JMITest getSelf() {
         return this;
     }
+    public void getSelfArray(JMITest[] v) {
+        v[0] = this;
+        v[1] = new JMITest();
+    }
 
     private int x;
     private static int y = 168;

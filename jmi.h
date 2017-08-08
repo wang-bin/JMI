@@ -3,7 +3,7 @@
  * Copyright (C) 2016-2017 Wang Bin - wbsecg1@gmail.com
  * MIT License
  */
-// TODO: object array; reset error before each call, reset exception after each call (Aspect pattern?)
+// TODO: reset error before each call, reset exception after each call (Aspect pattern?)
 #pragma once
 #include <algorithm>
 #include <array>
@@ -27,6 +27,7 @@ jstring from_string(const std::string& s, JNIEnv* env = nullptr);
 struct ClassTag {}; // used by JObject<Tag>. subclasses must define static std::string() name(), with or without "L ;" around
 struct MethodTag {}; // used by call() and callStatic(). subclasses must define static const char* name();
 struct FieldTag {}; // subclasses must define static const char* name();
+
 namespace detail {
 template<class Tag>
 using if_ClassTag = typename std::enable_if<std::is_base_of<ClassTag, Tag>::value, bool>::type;
@@ -49,7 +50,7 @@ template<class CTag, detail::if_ClassTag<CTag> = true> // remove if_ClassTag che
 class JObject : public ClassTag
 {
 public:
-    typedef CTag Tag;
+    using Tag = CTag;
     static const std::string className() {
         static std::string s(normalizeClassName(CTag::name()));
         return s;
@@ -64,7 +65,7 @@ public:
     JObject &operator=(JObject &&other) = default;
 
     operator jobject() const { return oid_;}
-    operator jclass() const { return classId();} // static?
+    operator jclass() const { return classId();}
     jobject id() const { return oid_; }
     explicit operator bool() const { return !!oid_;}
     std::string error() const {return error_;}
@@ -194,8 +195,7 @@ private:
 /*************************** JMI Public APIs End ***************************/
 
 /*************************** Below is JMI implementation and internal APIs***************************/
-template<class CTag>
-inline std::string signature_of(const JObject<CTag>& t) { return t.signature();}
+//template<class CTag> inline std::string signature_of(const JObject<CTag>& t) { return t.signature();} // won't work if JObject subclass inherits JObject<...>
 template<class T, detail::if_JObject<T> = true>
 inline std::string signature_of(const T& t) { return t.signature();}
 
@@ -315,15 +315,19 @@ using namespace std;
         return s;
     }
 
-    template<typename T>
+    template<typename T, if_not_JObject<T> = true>
     jarray make_jarray(JNIEnv *env, const T &element, size_t size); // element is for getting jobject class
-    template<class CTag>
-    jarray make_jarray(JNIEnv *env, const JObject<CTag, true> &element, size_t size);
+    template<class T, if_JObject<T> = true>
+    jarray make_jarray(JNIEnv *env, const T &element, size_t size) {
+        return env->NewObjectArray(size, jclass(element), nullptr);
+    }
 
-    template<typename T>
+    template<typename T, if_not_JObject<T> = true>
     void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const T &elm);
-    template<class CTag>
-    void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const JObject<CTag, true> &elm);
+    template<class T, if_JObject<T> = true>
+    void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const T &elm) {
+        set_jarray(env, arr, position, n, jobject(elm));
+    }
 
     template<typename T>
     jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref = false);
@@ -351,8 +355,16 @@ using namespace std;
     jvalue to_jvalue(const JObject<CTag, true> &obj, JNIEnv* env);
     // T(&)[N]?
 
-    template<typename T>
+    template<typename T, if_not_JObject<T> = true>
     void from_jarray(JNIEnv* env, const jvalue& v, T* t, size_t N);
+    template<typename T, if_JObject<T> = true>
+    void from_jarray(JNIEnv* env, const jvalue& v, T* t, size_t N) {
+        for (size_t i = 0; i < N; ++i) {
+            jobject s = env->GetObjectArrayElement(static_cast<jobjectArray>(v.l), i);
+            (t + i)->reset(s);
+            env->DeleteLocalRef(s);
+        }
+    }
     // env can be null for base types
     template<typename T> void from_jvalue(JNIEnv* env, const jvalue& v, T &t);
     template<typename T> void from_jvalue(JNIEnv* env, const jvalue& v, T *t, size_t n = 0) { // T* and T(&)[N] is the same
@@ -367,7 +379,7 @@ using namespace std;
     //template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { return from_jarray(env, v, t, N); }
 
     template<typename T> struct has_local_ref {
-        static const bool value = !is_fundamental<T>::value && !is_pointer<T>::value; // TODO: && not JObject
+        static const bool value = !is_fundamental<T>::value && !is_pointer<T>::value && !is_JObject<T>::value;
     };
     template<typename T>
     void set_ref_from_jvalue(JNIEnv* env, jvalue* jargs, T) {
@@ -882,14 +894,6 @@ jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref) {
 template<class CTag>
 jvalue to_jvalue(const JObject<CTag> &obj, JNIEnv* env) {
     return to_jvalue(jobject(obj), env);
-}
-template<class CTag>
-jarray make_jarray(JNIEnv *env, const JObject<CTag> &element, size_t size) {
-    return env->NewObjectArray(size, jclass(element), 0);
-}
-template<class CTag>
-void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const JObject<CTag> &elm) {
-    set_jarray(env, arr, position, n, jobject(elm));
 }
 } //namespace detail
 } //namespace jmi

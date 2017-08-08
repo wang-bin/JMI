@@ -72,6 +72,12 @@ JMITestCached JMITestCached::getSelf() const
 	return call<JMITestCached, Get>();
 }
 
+void JMITestCached::getSelfArray(array<JMITestCached,2> &v) const
+{
+	struct Get : MethodTag { static const char* name() {return "getSelfArray";}};
+	return call<Get>(std::ref(v));
+}
+
 
 void JMITestUncached::setX(int v)
 {
@@ -241,7 +247,12 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	cout << "field JMITest.str from Uncacheable Field object after set(): " << ufstr.get() << endl;
 	ufstr.set("Uncacheable Field str =()");
 	cout << "field JMITest.str from Uncacheable Field object after =(): " << ufstr.get() << endl;
-	
+
+	auto ufself = test.field<JObject<JMITest>>("self");
+	JObject<JMITest> ufselfv = ufself;
+	ufstr = ufselfv.field<std::string>("str");
+	cout << "field JMITest.self.str: " << ufstr.get() << endl;
+
 	cout << ">>>>>>>>>>>>testing JMITestCached APIs..." << endl;
 	JMITestCached jtc;
 	JMITestCached::setY(604);
@@ -265,6 +276,15 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	cout << "JMITestCached.getSelf().getX(): " << jtc_copy.getX() << endl;
 	jtc.setX(1231);
 	cout << "JMITestCached.getSelf().getX() after JMITestCached.setX(1231): " << jtc_copy.getX() << endl;
+
+	array<JMITestCached,2> selfs;
+	jtc.getSelfArray(selfs);
+	cout << "JMITestCached.getSelfArray()[0].getX(): " << selfs[0].getX() << endl;
+	cout << "JMITestCached.getSelfArray()[1].getX(): " << selfs[1].getX() << endl;
+
+	auto ufself2 = test.field<JMITestCached>("self");
+	JMITestCached ufselfv2 = ufself2;
+	cout << "field JMITestCached.self.getX(): " << ufselfv2.getX() << endl;
 
 	cout << ">>>>>>>>>>>>testing JMITestUncached APIs..." << endl;
 	JMITestUncached jtuc;

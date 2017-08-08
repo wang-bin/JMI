@@ -15,6 +15,7 @@ public:
     void getIntArray(int v[2]) const;
     void getIntArray(std::array<int, 2>& v) const;
     JMITestCached getSelf() const;
+    void getSelfArray(std::array<JMITestCached,2>& v) const;
 };
 
 class JMITestUncached : public jmi::JObject<JMITestClassTag>
