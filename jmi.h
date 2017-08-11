@@ -44,7 +44,9 @@ using if_not_JObject = typename std::enable_if<!is_JObject<T>::value, bool>::typ
 //template<typename T> // jni primitive types(not all fundamental types), jobject, jstring, ..., JObject, c++ array types
 //using if_jni_type = typename std::enable_if<std::is_fundamental<T>::value || if_array<T>::value ||
 template<typename T> struct signature;
-
+// string signature_of(T) returns signature of object of type T, signature_of() returns signature of void type
+// signature of function ptr
+template<typename R, typename... Args> std::string signature_of(R(*)(Args...));
 // object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
 template<class CTag, detail::if_ClassTag<CTag> = true> // remove if_ClassTag check to support CRTP? MyObject : public JObject<MyObject> { static std::string name() {...}};, but classes like JObject<int> will be allowed, also different CRTP classes for the same java class will have own instantiations 
 class JObject : public ClassTag
@@ -222,6 +224,7 @@ inline std::string signature_of(const T&) {
     return {signature<T>::value}; // initializer supports both char and char*
 }
 inline std::string signature_of(const char*) { return "Ljava/lang/String;";}
+inline std::string signature_of(char*) { return "Ljava/lang/String;";}
 inline std::string signature_of() { return {'V'};}
 // for base types, {'[', signature<T>::value};
 
@@ -603,6 +606,16 @@ using namespace std;
     }
 } // namespace detail
 
+template<typename R, typename... Args>
+std::string signature_of(R (*)(Args...)) {
+    static const auto s(detail::args_signature(std::forward<Args>(Args())...).append(signature_of(R())));
+    return s;
+}
+template<typename... Args>
+std::string signature_of(void (*)(Args...)) {
+    static const auto s(detail::args_signature(std::forward<Args>(Args())...).append(signature_of()));
+    return s;
+}
 template<class CTag, detail::if_ClassTag<CTag> V>
 JObject<CTag, V>& JObject<CTag, V>::operator=(const JObject &other) {
     if (this == &other)
@@ -646,7 +659,7 @@ bool JObject<CTag, V>::create(Args&&... args) {
         return false;
     }
     auto checker = call_on_exit([=]{ handle_exception(env); });
-    static const string s(args_signature(forward<Args>(args)...).append(signature_of())); // void
+    static const auto s(args_signature(forward<Args>(args)...).append(signature_of())); // void
     static const jmethodID mid = env->GetMethodID(cid, "<init>", s.c_str()); // can be static because class id, signature and arguments combination is unique
     if (!mid) {
         setError(string("Failed to find constructor of '" + className() + "' with signature '" + s + "'."));

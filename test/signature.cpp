@@ -5,6 +5,7 @@
 #include <vector>
 
 using namespace std;
+using namespace jmi;
 
 jint JNI_OnLoad(JavaVM* vm, void*)
 {
@@ -19,6 +20,11 @@ jint JNI_OnLoad(JavaVM* vm, void*)
     jmi::javaVM(vm);
     return JNI_VERSION_1_4;
 }
+
+void test1(int, const char* const, vector<jboolean>) {}
+int test2() {return 0;}
+std::string test3() {return string();}
+
 int main(int argc, char *argv[])
 {
     cout << "jmi test" << endl;
@@ -37,6 +43,10 @@ int main(int argc, char *argv[])
     float mat4[16];
     cout << jmi::signature_of(mat4) << endl;
     cout << "ref(mat4): " << jmi::signature_of(std::ref(mat4)) << endl;
+    //cout << "signature_of_args: " << jmi::signature_of_args<jint, jbyte, jlong>::value << endl;
     //std::unordered_map<float, string> m;
     //cout << jmi::signature_of(m);
+    cout << "test1: " << signature_of(test1) << endl;
+    cout << "test2: " << signature_of(test2) << endl;
+    cout << "test3: " << signature_of(test3) << endl;
 }
