@@ -49,7 +49,7 @@ template<typename T> struct signature;
 // signature of function ptr
 template<typename R, typename... Args> std::string signature_of(R(*)(Args...));
 // object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
-template<class CTag, detail::if_ClassTag<CTag> = true> // remove if_ClassTag check to support CRTP? MyObject : public JObject<MyObject> { static std::string name() {...}};, but classes like JObject<int> will be allowed, also different CRTP classes for the same java class will have own instantiations 
+template<class CTag> 
 class JObject : public ClassTag
 {
 public:
@@ -194,6 +194,8 @@ private:
 
     jobject oid_ = nullptr;
     mutable std::string error_;
+
+    detail::if_ClassTag<Tag> ensure_tag = true; // TODO: CRTP (class X : JObject<X>) is not supported because of incomplete type
 };
 /*************************** JMI Public APIs End ***************************/
 
@@ -356,7 +358,7 @@ using namespace std;
     jvalue to_jvalue(const reference_wrapper<C<T, A...>>& c, JNIEnv* env) { return to_jvalue(to_jarray(env, c.get(), true), env); }
     template<typename T, size_t N> jvalue to_jvalue(const reference_wrapper<T[N]>& c, JNIEnv* env) { return to_jvalue(to_jarray<T,N>(env, c.get(), true), env); }
     template<class CTag>
-    jvalue to_jvalue(const JObject<CTag, true> &obj, JNIEnv* env);
+    jvalue to_jvalue(const JObject<CTag> &obj, JNIEnv* env);
     // T(&)[N]?
 
     template<typename T, if_not_JObject<T> = true>
@@ -617,16 +619,16 @@ std::string signature_of(void (*)(Args...)) {
     static const auto s(detail::args_signature(std::forward<Args>(Args())...).append(signature_of()));
     return s;
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
-JObject<CTag, V>& JObject<CTag, V>::operator=(const JObject &other) {
+template<class CTag>
+JObject<CTag>& JObject<CTag>::operator=(const JObject &other) {
     if (this == &other)
         return *this;
     JNIEnv *env = getEnv();
     return reset(other.id(), env).setError(other.error());
 }
 
-template<class CTag, detail::if_ClassTag<CTag> V>
-JObject<CTag,V>& JObject<CTag, V>::reset(jobject obj, JNIEnv *env) {
+template<class CTag>
+JObject<CTag>& JObject<CTag>::reset(jobject obj, JNIEnv *env) {
     error_.clear();
     if (!env) {
         env = getEnv();
@@ -641,9 +643,9 @@ JObject<CTag,V>& JObject<CTag, V>::reset(jobject obj, JNIEnv *env) {
     return *this;
 }
 
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename... Args>
-bool JObject<CTag, V>::create(Args&&... args) {
+bool JObject<CTag>::create(Args&&... args) {
     using namespace std;
     using namespace detail;
     JNIEnv* env = nullptr; // FIXME: why build error if let env be the last parameter of create()?
@@ -675,42 +677,42 @@ bool JObject<CTag, V>::create(Args&&... args) {
     return true;
 }
 
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
-T JObject<CTag, V>::call(Args&&... args) const {
+T JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
     static jmethodID mid = nullptr;
     return call_with_methodID<T>(oid_, classId(), &mid, [this](std::string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<class MTag, typename... Args,  detail::if_MethodTag<MTag>>
-void JObject<CTag, V>::call(Args&&... args) const {
+void JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
     static jmethodID mid = nullptr;
     call_with_methodID<void>(oid_, classId(), &mid, [this](std::string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
-T JObject<CTag, V>::callStatic(Args&&... args) {
+T JObject<CTag>::callStatic(Args&&... args) {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
     static jmethodID mid = nullptr;
     return call_static_with_methodID<T>(classId(), &mid, nullptr, s, MTag::name(), std::forward<Args>(args)...);
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<class MTag, typename... Args,  detail::if_MethodTag<MTag>>
-void JObject<CTag, V>::callStatic(Args&&... args) {
+void JObject<CTag>::callStatic(Args&&... args) {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
     static jmethodID mid = nullptr;
     return call_static_with_methodID<void>(classId(), &mid, nullptr, s, MTag::name(), std::forward<Args>(args)...);
 }
 
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
-T JObject<CTag, V>::get() const {
+T JObject<CTag>::get() const {
     static jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([=]{
         if (detail::handle_exception()) // TODO: check fid
@@ -718,9 +720,9 @@ T JObject<CTag, V>::get() const {
     });
     return detail::get_field<T>(oid_, classId(), &fid, FTag::name());
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
-bool JObject<CTag, V>::set(T&& v) {
+bool JObject<CTag>::set(T&& v) {
     static jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([=]{
         if (detail::handle_exception())
@@ -729,53 +731,53 @@ bool JObject<CTag, V>::set(T&& v) {
     detail::set_field<T>(oid_, classId(), &fid, FTag::name(), std::forward<T>(v));
     return true;
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
-T JObject<CTag, V>::getStatic() {
+T JObject<CTag>::getStatic() {
     static jfieldID fid = nullptr;
     return detail::get_static_field<T>(classId(), &fid, FTag::name());
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
-bool JObject<CTag, V>::setStatic(T&& v) {
+bool JObject<CTag>::setStatic(T&& v) {
     static jfieldID fid = nullptr;
     detail::set_static_field<T>(classId(), &fid, FTag::name(), std::forward<T>(v));
     return true;
 }
 
 
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename T, typename... Args>
-T JObject<CTag, V>::call(const std::string &methodName, Args&&... args) const {
+T JObject<CTag>::call(const std::string &methodName, Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
     return call_with_methodID<T>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename... Args>
-void JObject<CTag, V>::call(const std::string &methodName, Args&&... args) const {
+void JObject<CTag>::call(const std::string &methodName, Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
     call_with_methodID<void>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename T, typename... Args>
-T JObject<CTag, V>::callStatic(const std::string &name, Args&&... args) {
+T JObject<CTag>::callStatic(const std::string &name, Args&&... args) {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
     return call_static_with_methodID<T>(classId(), nullptr, nullptr, s, name.c_str(), std::forward<Args>(args)...);
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename... Args>
-void JObject<CTag, V>::callStatic(const std::string &name, Args&&... args) {
+void JObject<CTag>::callStatic(const std::string &name, Args&&... args) {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
     call_static_with_methodID<void>(classId(), nullptr, nullptr, s, name.c_str(), std::forward<Args>(args)...);
 }
 
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename T>
-T JObject<CTag, V>::get(std::string&& fieldName) const {
+T JObject<CTag>::get(std::string&& fieldName) const {
     jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([=]{
         if (detail::handle_exception()) // TODO: check fid
@@ -783,9 +785,9 @@ T JObject<CTag, V>::get(std::string&& fieldName) const {
     });
     return detail::get_field<T>(oid_, classId(), &fid, fieldName.c_str());
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename T>
-bool JObject<CTag, V>::set(std::string&& fieldName, T&& v) {
+bool JObject<CTag>::set(std::string&& fieldName, T&& v) {
     jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([=]{
         if (detail::handle_exception())
@@ -794,23 +796,23 @@ bool JObject<CTag, V>::set(std::string&& fieldName, T&& v) {
     detail::set_field<T>(oid_, classId(), &fid, fieldName.c_str(), std::forward<T>(v));
     return true;
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename T>
-T JObject<CTag, V>::getStatic(std::string&& fieldName) {
+T JObject<CTag>::getStatic(std::string&& fieldName) {
     jfieldID fid = nullptr;
     return detail::get_static_field<T>(classId(), &fid, fieldName.c_str());
 }
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename T>
-bool JObject<CTag, V>::setStatic(std::string&& fieldName, T&& v) {
+bool JObject<CTag>::setStatic(std::string&& fieldName, T&& v) {
     jfieldID fid = nullptr;
     detail::set_static_field<T>(classId(), &fid, fieldName.c_str(), std::forward<T>(v));
     return true;
 }
 
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
-F JObject<CTag, V>::Field<F, MayBeFTag, isStaticField>::get() const
+F JObject<CTag>::Field<F, MayBeFTag, isStaticField>::get() const
 {
     auto checker = detail::call_on_exit([=]{
         detail::handle_exception();
@@ -820,9 +822,9 @@ F JObject<CTag, V>::Field<F, MayBeFTag, isStaticField>::get() const
     return detail::get_field<F>(getEnv(), oid_, id());
 }
 
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
-void JObject<CTag, V>::Field<F, MayBeFTag, isStaticField>::set(F&& v)
+void JObject<CTag>::Field<F, MayBeFTag, isStaticField>::set(F&& v)
 {
     auto checker = detail::call_on_exit([=]{
         detail::handle_exception();
@@ -833,9 +835,9 @@ void JObject<CTag, V>::Field<F, MayBeFTag, isStaticField>::set(F&& v)
         detail::set_field<F>(getEnv(), oid_, id(), std::forward<F>(v));
 }
 
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
-jfieldID JObject<CTag, V>::Field<F, MayBeFTag, isStaticField>::cachedId(jclass cid)
+jfieldID JObject<CTag>::Field<F, MayBeFTag, isStaticField>::cachedId(jclass cid)
 {
     static jfieldID fid = nullptr;
     if (!fid) {
@@ -847,24 +849,24 @@ jfieldID JObject<CTag, V>::Field<F, MayBeFTag, isStaticField>::cachedId(jclass c
     return fid;
 }
 
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
-JObject<CTag, V>::Field<F, MayBeFTag, isStaticField>::Field(jobject oid, jclass cid, const char* name)
+JObject<CTag>::Field<F, MayBeFTag, isStaticField>::Field(jobject oid, jclass cid, const char* name)
  : oid_(oid) {
     fid_ = detail::get_field_id<F>(getEnv(), cid, name);
 }
 
 
-template<class CTag, detail::if_ClassTag<CTag> V>
+template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
-JObject<CTag, V>::Field<F, MayBeFTag, isStaticField>::Field(jclass cid, const char* name)
+JObject<CTag>::Field<F, MayBeFTag, isStaticField>::Field(jclass cid, const char* name)
  : cid_(cid) {
     fid_ = detail::get_static_field_id<F>(getEnv(), cid, name);
 }
 
 
-template<class CTag, detail::if_ClassTag<CTag> V>
-jclass JObject<CTag, V>::classId(JNIEnv* env) {
+template<class CTag>
+jclass JObject<CTag>::classId(JNIEnv* env) {
     static jclass c = nullptr;
     if (!c) {
         if (!env) {
