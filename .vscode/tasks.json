@@ -1,0 +1,147 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "0.1.0",
+    "command": "cmake",
+    //"isShellCommand": true,
+    "options": {
+        "env":{
+        }
+    },
+    "tasks": [
+        {
+            "taskName": "configure.host",
+            "args": [ "-DCMAKE_BUILD_TYPE=Release"
+                    , "-H${workspaceRoot}"
+                    , "-B${workspaceRoot}/build/host"
+                    , "-GNinja"
+            ]
+        },
+        {
+            "taskName": "build.host",
+            "args": [ "--build"
+                    , "${workspaceRoot}/build/host"
+            ]
+            , "isBuildCommand": true
+            , "suppressTaskName": true
+        },
+        {
+            "taskName": "configure.android.armv7a",
+            "args": [ "-DCMAKE_TOOLCHAIN_FILE=${env:ANDROID_NDK}/build/cmake/android.toolchain.cmake"
+                    , "-DCMAKE_BUILD_TYPE=Release"
+                    , "-DANDROID_TOOLCHAIN=clang"
+                    , "-DANDROID_STL=c++_shared"
+                    , "-DANDROID_ABI=armeabi-v7a"
+                    , "-DANDROID_PLATFORM=android-14"
+                    , "-H${workspaceRoot}"
+                    , "-B${workspaceRoot}/build/android-armeabi-v7a"
+                    , "-GNinja"
+            ]
+            , "isBuildCommand": false
+        },
+        {
+            "taskName": "build.android.armv7a",
+            "args": [ "--build"
+                    , "${workspaceRoot}/build/android-armeabi-v7a"
+            ]
+            , "isBuildCommand": true
+            , "suppressTaskName": true
+        },
+        {
+            "taskName": "configure.android.armeabi",
+            "args": [ "-DCMAKE_TOOLCHAIN_FILE=${env:ANDROID_NDK}/build/cmake/android.toolchain.cmake"
+                    , "-DCMAKE_BUILD_TYPE=Release"
+                    , "-DANDROID_TOOLCHAIN=clang"     // clang does not work with gnu_stl+c++11
+                    , "-DANDROID_STL=c++_shared"
+                    , "-DANDROID_ABI=armeabi"
+                    , "-DANDROID_PLATFORM=android-14"
+                    , "-H${workspaceRoot}"
+                    , "-B${workspaceRoot}/build/android-armeabi"
+                    , "-GNinja"
+                    // cmake 3.7 options
+                    , "-DCMAKE_ANDROID_NDK=${env:ANDROID_NDK}"
+                    , "-DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang"
+                    , "-DCMAKE_ANDROID_STL_TYPE=c++_shared"
+                    //, "-DCMAKE_ANDROID_ARCH_ABI=armeabi" //CMAKE_SYSTEM_PROCESSOR
+                    //, "-DCMAKE_SYSTEM_VERSION=21"
+
+            ]
+            , "isBuildCommand": false
+        },
+        {
+            "taskName": "build.android.armeabi",
+            "args": [ "--build"
+                    , "${workspaceRoot}/build/android-armeabi"
+            ]
+            , "isBuildCommand": true
+            , "suppressTaskName": true //?
+        },
+        {
+            "taskName": "configure.android.armv7a.gcc",
+            "args": [ "-DCMAKE_TOOLCHAIN_FILE=${env:ANDROID_NDK}/build/cmake/android.toolchain.cmake"
+                    , "-DCMAKE_BUILD_TYPE=Release"
+                    , "-DANDROID_TOOLCHAIN=gcc"
+                    , "-DANDROID_STL=gnustl_shared"
+                    , "-DANDROID_ABI=armeabi-v7a"
+                    , "-DANDROID_PLATFORM=android-14"
+                    , "-H${workspaceRoot}"
+                    , "-B${workspaceRoot}/build/android-armeabi-v7a-gcc"
+                    , "-GNinja"
+            ]
+            , "isBuildCommand": false
+        },
+        {
+            "taskName": "build.android.armv7a.gcc",
+            "args": [ "--build"
+                    , "${workspaceRoot}/build/android-armeabi-v7a-gcc"
+            ]
+            , "isBuildCommand": true
+            , "suppressTaskName": true
+        },
+        {
+            "taskName": "configure.android.armeabi.gcc",
+            "args": [ "-DCMAKE_TOOLCHAIN_FILE=${env:ANDROID_NDK}/build/cmake/android.toolchain.cmake"
+                    , "-DCMAKE_BUILD_TYPE=Release"
+                    , "-DANDROID_TOOLCHAIN=gcc"
+                    , "-DANDROID_STL=gnustl_shared"
+                    , "-DANDROID_ABI=armeabi"
+                    , "-DANDROID_PLATFORM=android-14"
+                    , "-H${workspaceRoot}"
+                    , "-B${workspaceRoot}/build/android-armeabi-gcc"
+                    , "-GNinja"
+            ]
+            , "isBuildCommand": false
+        },
+        {
+            "taskName": "build.android.armeabi.gcc",
+            "args": [ "--build"
+                    , "${workspaceRoot}/build/android-armeabi-gcc"
+            ]
+            , "isBuildCommand": true
+            , "suppressTaskName": true //?
+        },
+        {
+            "taskName": "configure.android.x86",
+            "args": [ "-DCMAKE_TOOLCHAIN_FILE=${env:ANDROID_NDK}/build/cmake/android.toolchain.cmake"
+                    , "-DCMAKE_BUILD_TYPE=Release"
+                    , "-DANDROID_TOOLCHAIN=clang"     // clang does not work with gnu_stl+c++11
+                    , "-DANDROID_STL=c++_shared"
+                    , "-DANDROID_ABI=x86"
+                    , "-DANDROID_PLATFORM=android-14"
+                    , "-H${workspaceRoot}"
+                    , "-B${workspaceRoot}/build/android-x86"
+                    , "-GNinja"
+            ]
+            , "isBuildCommand": false
+        },
+        {
+            "taskName": "build.android.x86",
+            "args": [ "--build"
+                    , "${workspaceRoot}/build/android-x86"
+            ]
+            , "isBuildCommand": true
+            , "suppressTaskName": true
+        }
+    ],
+    "showOutput": "always"
+}
