@@ -49,7 +49,7 @@ template<typename T> struct signature;
 // signature of function ptr
 template<typename R, typename... Args> std::string signature_of(R(*)(Args...));
 // object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
-template<class CTag> 
+template<class CTag>
 class JObject : public ClassTag
 {
 public:
@@ -193,8 +193,6 @@ private:
 
     jobject oid_ = nullptr;
     mutable std::string error_;
-
-    detail::if_ClassTag<Tag> ensure_tag = true; // TODO: CRTP (class X : JObject<X>) is not supported because of incomplete type
 };
 /*************************** JMI Public APIs End ***************************/
 

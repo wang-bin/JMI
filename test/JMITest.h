@@ -1,9 +1,9 @@
 #include "jmi.h"
-
 struct JMITestClassTag : jmi::ClassTag { static std::string name() { return "JMITest";} };
-class JMITestCached : public jmi::JObject<JMITestClassTag> // can not use CRTP
+class JMITestCached : public jmi::JObject<JMITestCached> // or jmi::JObject<JMITestClassTag>
 {
 public:
+    static std::string name() { return "JMITest";} // required if derive from JObject<JMITestCached>
     void setX(int v);
     int getX() const;
     static void setY(int v);
