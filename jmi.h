@@ -143,16 +143,15 @@ public:
         F get() const;
         void set(F&& v);
         Field& operator=(F&& v) {
-            set(v);
+            set(std::forward<F>(v));
             return *this;
         }
     protected:
         static jfieldID cachedId(jclass cid); // usually cid is used only once
-        Field(jobject oid, jclass cid) : oid_(oid) { fid_ = cachedId(cid); } // it's protected so we can sure cacheable ctor will not be called for uncacheable Field
-        Field(jobject oid, jclass cid, const char* name);
-        // static field
-        Field(jclass cid) : cid_(cid) { fid_ = cachedId(cid); }
-        Field(jclass cid, const char* name);
+        // oid nullptr: static field
+        // it's protected so we can sure cacheable ctor will not be called for uncacheable Field
+        Field(jclass cid, jobject oid = nullptr);
+        Field(jclass cid, const char* name, jobject oid = nullptr);
 
         union {
             jobject oid_;
@@ -162,20 +161,20 @@ public:
         friend class JObject<CTag>;
     };
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
-    Field<T, FTag, false> field() const {
-        return Field<T, FTag, false>(oid_, classId());
+    auto field() const->Field<T, FTag, false> {
+        return Field<T, FTag, false>(classId(), oid_);
     }
     template<typename T>
-    Field<T, void, false> field(std::string&& name) const {
-        return Field<T, void, false>(oid_, classId(), name.c_str());
+    auto field(std::string&& name) const->Field<T, void, false> {
+        return Field<T, void, false>(classId(), name.c_str(), oid_);
     }
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
-    static Field<T, FTag, true>& staticField() { // cacheable and static java storage, so returning ref is better
+    static auto staticField()->Field<T, FTag, true>& { // cacheable and static java storage, so returning ref is better
         static Field<T, FTag, true> f(classId());
         return f;
     }
     template<typename T>
-    static Field<T, void, true> staticField(std::string&& name) {
+    static auto staticField(std::string&& name)->Field<T, void, true> {
         return Field<T, void, true>(classId(), name.c_str());
     }
 private:
@@ -851,17 +850,23 @@ jfieldID JObject<CTag>::Field<F, MayBeFTag, isStaticField>::cachedId(jclass cid)
 
 template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
-JObject<CTag>::Field<F, MayBeFTag, isStaticField>::Field(jobject oid, jclass cid, const char* name)
+JObject<CTag>::Field<F, MayBeFTag, isStaticField>::Field(jclass cid, jobject oid)
  : oid_(oid) {
-    fid_ = detail::get_field_id<F>(getEnv(), cid, name);
+    fid_ = cachedId(cid);
+    if (isStaticField)
+        cid_ = cid;
 }
-
 
 template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
-JObject<CTag>::Field<F, MayBeFTag, isStaticField>::Field(jclass cid, const char* name)
- : cid_(cid) {
-    fid_ = detail::get_static_field_id<F>(getEnv(), cid, name);
+JObject<CTag>::Field<F, MayBeFTag, isStaticField>::Field(jclass cid, const char* name, jobject oid)
+ : oid_(oid) {
+    if (isStaticField) {
+        fid_ = detail::get_static_field_id<F>(getEnv(), cid, name);
+        cid_ = cid;
+    } else {
+        fid_ = detail::get_field_id<F>(getEnv(), cid, name);
+    }
 }
 
 
