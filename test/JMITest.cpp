@@ -4,6 +4,13 @@
 #include "jmi.h"
 #include "JMITest.h"
 
+#define TEST(expr) do { \
+		if (!(expr)) { \
+			std::cerr << __LINE__ << " test error: " << #expr << std::endl; \
+			exit(1); \
+		} \
+	} while(false)
+
 using namespace std;
 using namespace jmi;
 
@@ -145,160 +152,162 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 		static std::string name() { return jmi::signature_of(std::string());}
 	};
 	jmi::JObject<JString> jstr0;
-	if (!jstr0.create(cxxa)) {
-		cout << __LINE__<< " !!!!create error: " << jstr0.error() << endl;
-	}
+	TEST(jstr0.create(cxxa));
 	auto jstr = std::move(jstr0);
 	auto js2 = jstr;
-	cout << "JString len: " << jstr.call<jint>("length") << jstr.error() << endl;
-	cout << jstr.signature() << endl;
+	TEST(jstr.call<jint>("length") == 3);
+	TEST(jstr.error().empty());
+	TEST(jstr.signature() == "Ljava/lang/String;");
 	jstr.reset();
 	jstr.create("abcd");
-	cout << "JString len: " << jstr.call<jint>("length") << jstr.error() << endl;
-    cout << "JString[2]: " << (char)jstr.call<jchar>("charAt", 2) << jstr.error() << std::endl;
-	cout << "JString[2]: " << (char)jstr.call<jchar>("charAt", 2) << jstr.error() << std::endl;
+	TEST(jstr.call<jint>("length") == 4);
+	jchar ccc = jstr.call<jchar>("charAt", 2);
+	TEST(ccc == 'c');
+	TEST(ccc == 'c');
+	TEST(jstr.error().empty());
 	//jmethodID mid= env->GetMethodID(js.get_class(),"charAt", "(I)C");
 	//std::cout << "[2]:" <<(char)env->CallCharMethod(js.instance(), mid, 2) << endl;
-    cout << "valueOf: " << jmi::JObject<JString>::callStatic<std::string>("valueOf", 123) << jstr.error() << std::endl;
-    cout << "indexOf c: " << jstr.call<jint>("indexOf", std::string("c"), 1) << jstr.error() << std::endl;
+	string sss = jmi::JObject<JString>::callStatic<std::string>("valueOf", 123);
+	TEST(sss == "123");
+	int ic = jstr.call<jint>("indexOf", std::string("c"), 1);
+	TEST(ic == 2);
 	struct IndexOf : jmi::MethodTag { static const char* name() {return "indexOf";} };
-    cout << "JString.indexOf c: " << jstr.call<jint,IndexOf>(std::string("c"), 1) << jstr.error() << std::endl;
-    cout << "JString.indexOf c: " << jstr.call<jint,IndexOf>(std::string("c"), 1) << jstr.error() << std::endl;
-    cout << "JString.indexOf c: " << jstr.call<jint,IndexOf>(std::string("c"), 1) << jstr.error() << std::endl;
+	ic = jstr.call<jint,IndexOf>(std::string("c"), 1);
+	TEST(ic == 2);
+	TEST(jstr.error().empty());
+	ic = jstr.call<jint,IndexOf>(std::string("c"), 1);
+	TEST(ic == 2);
+	TEST(jstr.error().empty());
 
     //jbyte ca[] = {'a', 'b', 'c', 'd'}; // why crash? why const crash?
 	jbyte *ca = (jbyte*)"abcd";
     jstr.reset();
-	jstr.create(ca);
-
+	TEST(!jstr.create(ca));
+	
 	struct JMITest : public jmi::ClassTag { static std::string name() {return "JMITest";}};
 	jmi::JObject<JMITest> test;
 	struct Y : public jmi::FieldTag { static const char* name() { return "y";}};
 	auto y = test.getStatic<Y, jint>();
-	cout << "static field JMITest::y initial value: " << y << endl;
-	if (!jmi::JObject<JMITest>::setStatic<Y>(1258)) {
-		cout << "static field JMITest.y set error" << endl;
-	}
-	cout << "static field JMITest.y after set: " << test.getStatic<Y, jint>() << endl;
+	TEST(y == 168);
+	TEST(jmi::JObject<JMITest>::setStatic<Y>(1258));
+	auto yyy = test.getStatic<Y, jint>();
+	TEST(yyy == 1258);
 
 	struct SStr : public jmi::FieldTag { static const char* name() { return "sstr";}};
 	auto sstr = jmi::JObject<JMITest>::getStatic<SStr, std::string>();
-	cout << "static field JMITest::sstr initial value: " << sstr << endl;
-	if (!jmi::JObject<JMITest>::setStatic<SStr>(std::string(":D setting static string..."))) {
-		cout << "static field JMITest.sstr set error" << endl;
-	}
-	cout << "static field JMITest.sstr after set: " << jmi::JObject<JMITest>::getStatic<SStr, std::string>() << endl;
+	TEST(sstr == "static text");
+	TEST(jmi::JObject<JMITest>::setStatic<SStr>(std::string(":D setting static string...")));
+	sss = jmi::JObject<JMITest>::getStatic<SStr,std::string>();
+	TEST(sss == ":D setting static string...");
 
 	cout << ">>>>>>>>>>>>testing Cacheable StaticField APIs..." << endl;
 	auto& fsstr = jmi::JObject<JMITest>::staticField<SStr, std::string>();
-	cout << "field JMITest.sstr from cacheable StaticField object: " << fsstr.get() << endl;
+	TEST(fsstr.get() == ":D setting static string...");
 	jmi::JObject<JMITest>::staticField<SStr, std::string>();
 	fsstr = jmi::JObject<JMITest>::staticField<SStr, std::string>();
 	fsstr.set("Cacheable StaticField sstr set");
-	cout << "field JMITest.sstr from Cacheable StaticField object after set(): " << fsstr.get() << endl;
-	fsstr.set("Cacheable StaticField sstr =()");
-	cout << "field JMITest.sstr from Cacheable StaticField object after =(): " << fsstr.get() << endl;
+	TEST(fsstr.get() == "Cacheable StaticField sstr set");
+	fsstr = "Cacheable StaticField sstr =()";
+	TEST(fsstr.get() == "Cacheable StaticField sstr =()");
 
 	cout << ">>>>>>>>>>>>testing Uncacheable StaticField APIs..." << endl;
 	auto ufsstr = jmi::JObject<JMITest>::staticField<std::string>("sstr");
-	cout << "field JMITest.sstr from uncacheable StaticField object: " << ufsstr.get() << endl;
+	TEST(ufsstr.get() == fsstr.get());
 	ufsstr = jmi::JObject<JMITest>::staticField<std::string>("sstr");
 	ufsstr.set("Uncacheable StaticField sstr set");
-	cout << "field JMITest.sstr from Uncacheable StaticField object after set(): " << ufsstr.get() << endl;
+	TEST(ufsstr.get() == "Uncacheable StaticField sstr set");
+	//cout << "field JMITest.sstr from Uncacheable StaticField object after set(): " << ufsstr.get() << endl;
 	ufsstr.set("Uncacheable StaticField sstr =()");
-	cout << "field JMITest.sstr from Uncacheable StaticField object after =(): " << ufsstr.get() << endl;
+	TEST(ufsstr.get() == string("Uncacheable StaticField sstr =()"));
+	//cout << "field JMITest.sstr from Uncacheable StaticField object after =(): " << ufsstr.get() << endl;
 
 	cout << ">>>>>>>>>>>>testing Cacheable field APIs..." << endl;
 	test.create();
 	struct X : public jmi::FieldTag { static const char* name() { return "x";}};
 	int x = test.get<X, jint>();
-	cout << "field JMITest.x initial value: " << x << endl;
-	if (!test.set<X>(3141)) {
-		cout << "field JMITest.x set error" << endl;
-	}
-	cout << "field JMITest.x after set: " << test.get<X, jint>() << endl;
+	TEST(x == 0);
+	TEST(test.set<X>(3141));
 
 	cout << ">>>>>>>>>>>>testing Unacheable field APIs..." << endl;
 	auto str = test.get<std::string>("str");
-	cout << "field JMITest::str initial value: " << str << endl;
-	if (!test.set("str", std::string(":D setting string..."))) {
-		cout << "field JMITest.str set error" << endl;
-	}
-	cout << "field JMITest.str after set: " << test.get<std::string>("str") << endl;
+	TEST(str == "text");
+	TEST(test.set("str", std::string(":D setting string...")));
+	TEST(test.get<std::string>("str") == ":D setting string...");
 
 	cout << ">>>>>>>>>>>>testing Cacheable Field APIs..." << endl;
 	struct Str : public jmi::FieldTag { static const char* name() { return "str";}};
 	auto fstr = test.field<Str, std::string>();
-	cout << "field JMITest.str from cacheable Field object: " << fstr.get() << endl;
+	TEST((string)fstr == string(":D setting string..."));
 	fstr = test.field<Str, std::string>();
 	test.field<Str, std::string>();
 	fstr.set("Cacheable Field str set");
 	std::string v_fstr = fstr;
 	jfieldID id_fstr = fstr;
-	cout << "field JMITest.str from Cacheable Field object after set(): " << fstr.get() << endl;
-	fstr.set("Cacheable Field str =()");
-	cout << "field JMITest.str from Cacheable Field object after =(): " << fstr.get() << endl;
+	TEST(fstr.get() == "Cacheable Field str set");
+	fstr = "Cacheable Field str =()";
+	TEST(fstr.get() == "Cacheable Field str =()");
 
 	cout << ">>>>>>>>>>>>testing Uncacheable Field APIs..." << endl;
 	auto ufstr = test.field<std::string>("str");
-	cout << "field JMITest.str from uncacheable Field object: " << ufstr.get() << endl;
+	TEST(ufstr.get() == fstr.get());
 	ufstr = test.field<std::string>("str");
-	ufstr.set("Uncacheable Field str set");
-	cout << "field JMITest.str from Uncacheable Field object after set(): " << ufstr.get() << endl;
+	TEST(ufstr.get() == fstr.get());
 	ufstr.set("Uncacheable Field str =()");
-	cout << "field JMITest.str from Uncacheable Field object after =(): " << ufstr.get() << endl;
+	TEST(ufstr.get() == "Uncacheable Field str =()");
 
 	auto ufself = test.field<JObject<JMITest>>("self");
 	JObject<JMITest> ufselfv = ufself;
 	ufstr = ufselfv.field<std::string>("str");
-	cout << "field JMITest.self.str: " << ufstr.get() << endl;
+	TEST(ufstr.get() == fstr.get());
 
 	cout << ">>>>>>>>>>>>testing JMITestCached APIs..." << endl;
 	JMITestCached jtc;
 	JMITestCached::setY(604);
-	cout << "JMITestCached::getY: " << JMITestCached::getY() << endl;
-	if (!jtc.create())
-		cerr << "JMITestCached.create() error" << endl;
+	TEST(JMITestCached::getY() == 604);
+	TEST(jtc.create());
 	jtc.setX(2017);
-	cout << "JMITestCached.getX: " << jtc.getX() << endl;
+	TEST(jtc.getX() == 2017);
 	jtc.setStr("why");
-	cout << "JMITestCached.getStr: " << jtc.getStr() << endl;
+	TEST(jtc.getStr() == "why");
 	int a0[2]{};
 	jtc.getIntArray(a0);
-	cout << "JMITestCached.getIntArray(int[2]): [" << a0[0] << ", " << a0[1] << "]" << endl;
+	TEST(a0[0] == 1);
+	TEST(a0[1] == 2017);
 	std::array<int, 2> a1;
 	jtc.getIntArray(a1);
-	cout << "JMITestCached.getIntArray(std::array<int, 2>&): [" << a1[0] << ", " << a1[1] << "]" << endl;
+	TEST(a1[0] == 1);
+	TEST(a1[1] == 2017);
 	array<std::string,1> outs;
 	JMITestCached::getSStr(outs);
-	cout << "JMITestCached.getSStr(std::string&): " << outs[0] << endl;
+	TEST(outs[0] == " output  String[]");
 	JMITestCached jtc_copy = jtc.getSelf();
-	cout << "JMITestCached.getSelf().getX(): " << jtc_copy.getX() << endl;
+	TEST(jtc_copy.getX() == 2017);
 	jtc.setX(1231);
-	cout << "JMITestCached.getSelf().getX() after JMITestCached.setX(1231): " << jtc_copy.getX() << endl;
+	TEST(jtc_copy.getX() == 1231);
 
 	array<JMITestCached,2> selfs;
 	jtc.getSelfArray(selfs);
-	cout << "JMITestCached.getSelfArray()[0].getX(): " << selfs[0].getX() << endl;
-	cout << "JMITestCached.getSelfArray()[1].getX(): " << selfs[1].getX() << endl;
+	TEST(selfs[0].getX() == 1231);
+	TEST(selfs[1].getX() == 0);
 
 	auto ufself2 = test.field<JMITestCached>("self");
 	JMITestCached ufselfv2 = ufself2;
-	cout << "field JMITestCached.self.getX(): " << ufselfv2.getX() << endl;
+	TEST(ufselfv2.getX() == 3141);
 
 	cout << ">>>>>>>>>>>>testing JMITestUncached APIs..." << endl;
 	JMITestUncached jtuc;
 	JMITestUncached::setY(604);
-	cout << "JMITestUncached::getY: " << JMITestUncached::getY() << endl;
-	if (!jtuc.create())
-		cerr << "JMITestUncached.create() error" << endl;
+	TEST(JMITestUncached::getY() == 604);
+	TEST(jtuc.create());
 	jtuc.setX(2017);
-	cout << "JMITestUncached.getX: " << jtuc.getX() << endl;
+	TEST(jtuc.getX() == 2017);
 	jtuc.setStr("why");
-	cout << "JMITestUncached.getStr: " << jtuc.getStr() << endl;
+	TEST(jtuc.getStr() == "why");
 	jtuc.getIntArray(a0);
-	cout << "JMITestUncached.getIntArray(int[2]): [" << a0[0] << ", " << a0[1] << "]" << endl;
+	TEST(a0[0] == 1);
+	TEST(a0[1] == 2017);
 	jtuc.getIntArray(a1);
-	cout << "JMITestUncached.getIntArray(std::array<int, 2>&): [" << a1[0] << ", " << a1[1] << "]" << endl;
+	TEST(a1[0] == 1);
+	TEST(a1[1] == 2017);
 }
 } // extern "C"
