@@ -103,9 +103,10 @@ jstring from_string(const std::string &s, JNIEnv* env)
 }
 
 namespace android {
-jobject application()
+jobject application(JNIEnv* env)
 {
-    JNIEnv *env = jmi::getEnv();
+    if (!env)
+        env = jmi::getEnv();
     jclass c_at = env->FindClass("android/app/ActivityThread");
     jmethodID m_cat = env->GetStaticMethodID(c_at, "currentActivityThread", "()Landroid/app/ActivityThread;");
     jobject at = env->CallStaticObjectMethod(c_at, m_cat);

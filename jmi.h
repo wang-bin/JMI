@@ -25,7 +25,7 @@ std::string to_string(jstring s, JNIEnv* env = nullptr);
 jstring from_string(const std::string& s, JNIEnv* env = nullptr);
 
 namespace android {
-jobject application();
+jobject application(JNIEnv* env = nullptr);
 } // namespace android
 
 struct ClassTag {}; // used by JObject<Tag>. subclasses must define static std::string() name(), with or without "L ;" around
