@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2017 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2018 Wang Bin - wbsecg1@gmail.com
  * MIT License
  */
 // TODO: reset error before each call, reset exception after each call (Aspect pattern?)
@@ -23,6 +23,10 @@ JNIEnv *getEnv();
 std::string to_string(jstring s, JNIEnv* env = nullptr);
 // You have to call DeleteLocalRef() manually for the returned jstring
 jstring from_string(const std::string& s, JNIEnv* env = nullptr);
+
+namespace android {
+jobject application();
+} // namespace android
 
 struct ClassTag {}; // used by JObject<Tag>. subclasses must define static std::string() name(), with or without "L ;" around
 struct MethodTag {}; // used by call() and callStatic(). subclasses must define static const char* name();
@@ -183,8 +187,8 @@ private:
         error_ = s;
         return *const_cast<JObject*>(this);
     }
-    static std::string normalizeClassName(std::string&& name) {
-        std::string s = std::forward<std::string>(name);
+    static std::string normalizeClassName(std::string name) {
+        std::string s = name;
         if (s[0] == 'L' && s.back() == ';')
             s = s.substr(1, s.size()-2);
         replace(s.begin(), s.end(), '.', '/');

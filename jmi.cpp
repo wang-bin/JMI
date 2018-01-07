@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2017 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2018 Wang Bin - wbsecg1@gmail.com
  * MIT License
  */
 #include "jmi.h"
@@ -101,6 +101,18 @@ jstring from_string(const std::string &s, JNIEnv* env)
         env = getEnv();
     return env->NewStringUTF(s.c_str());
 }
+
+namespace android {
+jobject application()
+{
+    JNIEnv *env = jmi::getEnv();
+    jclass c_at = env->FindClass("android/app/ActivityThread");
+    jmethodID m_cat = env->GetStaticMethodID(c_at, "currentActivityThread", "()Landroid/app/ActivityThread;");
+    jobject at = env->CallStaticObjectMethod(c_at, m_cat);
+    jmethodID m_ga = env->GetMethodID(c_at, "getApplication", "()Landroid/app/Application;");
+    return env->CallObjectMethod(at, m_ga);
+}
+} // namespace android
 
 namespace detail {
 template<>
