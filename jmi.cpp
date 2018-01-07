@@ -111,7 +111,10 @@ jobject application(JNIEnv* env)
     jmethodID m_cat = env->GetStaticMethodID(c_at, "currentActivityThread", "()Landroid/app/ActivityThread;");
     jobject at = env->CallStaticObjectMethod(c_at, m_cat);
     jmethodID m_ga = env->GetMethodID(c_at, "getApplication", "()Landroid/app/Application;");
-    return env->CallObjectMethod(at, m_ga);
+    env->DeleteLocalRef(c_at);
+    jobject app = env->CallObjectMethod(at, m_ga);
+    env->DeleteLocalRef(at);
+    return app;
 }
 } // namespace android
 

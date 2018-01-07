@@ -64,7 +64,14 @@ public:
     }
     static const std::string signature() {return "L" + className() + ";";}
 
-    JObject(jobject obj = nullptr) { reset(obj); }
+    // construct from an existing jobject. Usually obj is from native jni api containing a local ref, and it's local ref will be deleted if del_localref is true
+    JObject(jobject obj = nullptr, bool del_localref = true) {
+        JNIEnv *env = getEnv();
+        reset(obj, env);
+        if (obj && del_localref)
+            env->DeleteLocalRef(obj);
+    }
+
     ~JObject() { reset(); }
     JObject(const JObject &other) { *this = other; }
     JObject &operator=(const JObject &other);
@@ -639,8 +646,10 @@ JObject<CTag>& JObject<CTag>::reset(jobject obj, JNIEnv *env) {
     if (oid_)
         env->DeleteGlobalRef(oid_);
     oid_ = nullptr;
-    if (obj)
+    if (obj) {
         oid_ = env->NewGlobalRef(obj);
+        //env->DeleteLocalRef(obj); // obj from JObject has no local ref
+    }
     return *this;
 }
 
