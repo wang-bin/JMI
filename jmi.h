@@ -64,7 +64,7 @@ public:
     }
     static const std::string signature() {return "L" + className() + ";";}
 
-    JObject(jobject obj = nullptr) : oid_(obj) { reset(obj); }
+    JObject(jobject obj = nullptr) { reset(obj); }
     ~JObject() { reset(); }
     JObject(const JObject &other) { *this = other; }
     JObject &operator=(const JObject &other);
