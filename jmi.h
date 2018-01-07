@@ -25,6 +25,7 @@ std::string to_string(jstring s, JNIEnv* env = nullptr);
 jstring from_string(const std::string& s, JNIEnv* env = nullptr);
 
 namespace android {
+// current android/app/Application object containing a local ref
 jobject application(JNIEnv* env = nullptr);
 } // namespace android
 
@@ -71,12 +72,22 @@ public:
         if (obj && del_localref)
             env->DeleteLocalRef(obj);
     }
-
+    JObject(const JObject &other) { reset(other.id()).setError(other.error()); }
+    JObject &operator=(const JObject &other) {
+        if (this == &other)
+            return *this;
+        return reset(other.id()).setError(other.error());
+    }
+    JObject(JObject &&other) { // default implementation does not reset other.oid_
+        std::swap(oid_, other.oid_);
+        std::swap(error_, other.error_);
+    }
+    JObject &operator=(JObject &&other) { // default implementation does not reset other.oid_
+        std::swap(oid_, other.oid_);
+        std::swap(error_, other.error_);
+        return *this;
+    }
     ~JObject() { reset(); }
-    JObject(const JObject &other) { *this = other; }
-    JObject &operator=(const JObject &other);
-    JObject(JObject &&other) = default;
-    JObject &operator=(JObject &&other) = default;
 
     operator jobject() const { return oid_;}
     operator jclass() const { return classId();}
@@ -626,13 +637,6 @@ template<typename... Args>
 std::string signature_of(void (*)(Args...)) {
     static const auto s(detail::args_signature(std::forward<Args>(Args())...).append(signature_of()));
     return s;
-}
-template<class CTag>
-JObject<CTag>& JObject<CTag>::operator=(const JObject &other) {
-    if (this == &other)
-        return *this;
-    JNIEnv *env = getEnv();
-    return reset(other.id(), env).setError(other.error());
 }
 
 template<class CTag>
