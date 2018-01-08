@@ -108,9 +108,9 @@ jobject application(JNIEnv* env)
     if (!env)
         env = jmi::getEnv();
     jclass c_at = env->FindClass("android/app/ActivityThread");
-    jmethodID m_cat = env->GetStaticMethodID(c_at, "currentActivityThread", "()Landroid/app/ActivityThread;");
+    static jmethodID m_cat = env->GetStaticMethodID(c_at, "currentActivityThread", "()Landroid/app/ActivityThread;");
+    static jmethodID m_ga = env->GetMethodID(c_at, "getApplication", "()Landroid/app/Application;");
     jobject at = env->CallStaticObjectMethod(c_at, m_cat);
-    jmethodID m_ga = env->GetMethodID(c_at, "getApplication", "()Landroid/app/Application;");
     env->DeleteLocalRef(c_at);
     jobject app = env->CallObjectMethod(at, m_ga);
     env->DeleteLocalRef(at);
