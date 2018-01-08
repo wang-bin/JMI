@@ -201,8 +201,8 @@ public:
     }
 private:
     static jclass classId(JNIEnv* env = nullptr);
-    JObject& setError(const std::string& s) const {
-        error_ = s;
+    JObject& setError(std::string&& s) const {
+        error_ = std::move(s);
         return *const_cast<JObject*>(this);
     }
     static std::string normalizeClassName(std::string name) {
@@ -490,7 +490,7 @@ using namespace std;
     }
 
     template<typename T, typename... Args>
-    T call_with_methodID(jobject oid, jclass cid, jmethodID* pmid, function<void(string err)> err_cb, const string& signature, const char* name, Args&&... args) {
+    T call_with_methodID(jobject oid, jclass cid, jmethodID* pmid, function<void(string&& err)> err_cb, const string& signature, const char* name, Args&&... args) {
         if (err_cb)
             err_cb(string());
         if (!cid)
@@ -521,7 +521,7 @@ using namespace std;
     }
 
     template<typename T, typename... Args>
-    T call_static_with_methodID(jclass cid, jmethodID* pmid, std::function<void(std::string err)> err_cb, const std::string& signature, const char* name, Args&&... args) {
+    T call_static_with_methodID(jclass cid, jmethodID* pmid, std::function<void(std::string&& err)> err_cb, const std::string& signature, const char* name, Args&&... args) {
         if (err_cb)
             err_cb(string());
         if (!cid)
@@ -687,8 +687,8 @@ bool JObject<CTag>::create(Args&&... args) {
         setError(string("Failed to call constructor '" + className() + "' with signature '" + s + "'."));
         return false;
     }
-    oid_ = env->NewGlobalRef(oid);
-    return true;
+    reset(oid, env);
+    return !!oid_;
 }
 
 template<class CTag>
@@ -697,7 +697,7 @@ T JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
     static jmethodID mid = nullptr;
-    return call_with_methodID<T>(oid_, classId(), &mid, [this](std::string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
+    return call_with_methodID<T>(oid_, classId(), &mid, [this](std::string&& err){ setError(std::move(err));}, s, MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<class MTag, typename... Args,  detail::if_MethodTag<MTag>>
@@ -705,7 +705,7 @@ void JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
     static jmethodID mid = nullptr;
-    call_with_methodID<void>(oid_, classId(), &mid, [this](std::string err){ setError(err);}, s, MTag::name(), std::forward<Args>(args)...);
+    call_with_methodID<void>(oid_, classId(), &mid, [this](std::string&& err){ setError(std::move(err));}, s, MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
@@ -765,14 +765,14 @@ template<typename T, typename... Args>
 T JObject<CTag>::call(const std::string &methodName, Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
-    return call_with_methodID<T>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
+    return call_with_methodID<T>(oid_, classId(), nullptr, [this](std::string&& err){ setError(std::move(err));}, s, methodName.c_str(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename... Args>
 void JObject<CTag>::call(const std::string &methodName, Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
-    call_with_methodID<void>(oid_, classId(), nullptr, [this](std::string err){ setError(err);}, s, methodName.c_str(), std::forward<Args>(args)...);
+    call_with_methodID<void>(oid_, classId(), nullptr, [this](std::string&& err){ setError(std::move(err));}, s, methodName.c_str(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename T, typename... Args>
