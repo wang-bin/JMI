@@ -47,8 +47,8 @@ using if_JObject = typename std::enable_if<is_JObject<T>::value, bool>::type;
 template<class T>
 using if_not_JObject = typename std::enable_if<!is_JObject<T>::value, bool>::type;
 }
-//template<typename T> // jni primitive types(not all fundamental types), jobject, jstring, ..., JObject, c++ array types
-//using if_jni_type = typename std::enable_if<std::is_fundamental<T>::value || if_array<T>::value ||
+//template<typename T> // jni primitive types(not all c++ arithmetic types?), jobject, jstring, ..., JObject, c++ array types
+//using if_jni_type = typename std::enable_if<std::is_arithmetic<T>::value || if_array<T>::value || is_same<T,jobject> || ... || is_JObject<T>::value
 template<typename T> struct signature;
 // string signature_of(T) returns signature of object of type T, signature_of() returns signature of void type
 // signature of function ptr
@@ -237,7 +237,7 @@ template<> struct signature<jdouble> { static const char value = 'D';};
 template<> struct signature<std::string> { constexpr static const char* value = "Ljava/lang/String;";};
 template<> struct signature<char*> { constexpr static const char* value = "Ljava/lang/String;";};
 
-// T* and T(&)[N] are treated as the same. use enable_if to select 1 of them. The function parameter is (const T&), so the default implemention of signature_of(const T&) must check is_pointer too.
+// T* and T(&)[N] are treated as the same. use enable_if to select 1 of them. The function parameter is (const T&), so the default implementation of signature_of(const T&) must check is_pointer too.
 template<typename T> using if_pointer = typename std::enable_if<std::is_pointer<T>::value, bool>::type;
 template<typename T> using if_not_pointer = typename std::enable_if<!std::is_pointer<T>::value, bool>::type;
 template<typename T> using if_array = typename std::enable_if<std::is_array<T>::value, bool>::type;
@@ -404,7 +404,7 @@ using namespace std;
     //template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { return from_jarray(env, v, t, N); }
 
     template<typename T> struct has_local_ref {
-        static const bool value = !is_fundamental<T>::value && !is_pointer<T>::value && !is_JObject<T>::value;
+        static const bool value = !is_arithmetic<T>::value && !is_pointer<T>::value && !is_JObject<T>::value;
     };
     template<typename T>
     void set_ref_from_jvalue(JNIEnv* env, jvalue* jargs, T) {
@@ -412,7 +412,7 @@ using namespace std;
         if (has_local_ref<Tn>::value)
             env->DeleteLocalRef(jargs->l);
     }
-    static inline void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, const char* s) {
+    static inline void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, const char*) {
         env->DeleteLocalRef(jargs->l);
     }
     template<typename T>
@@ -424,7 +424,7 @@ using namespace std;
     }
     static inline void delete_array_local_ref(JNIEnv* env, jarray a, size_t n, bool delete_elements) {
         if (delete_elements) {
-            for (jsize i = 0; i < n; ++i) {
+            for (jsize i = 0; i < jsize(n); ++i) {
                 jobject ei = env->GetObjectArrayElement(jobjectArray(a), i);
                 if (ei)
                     env->DeleteLocalRef(ei);
@@ -449,7 +449,7 @@ using namespace std;
         delete_array_local_ref(env, static_cast<jarray>(jargs->l), N, has_local_ref<T>::value);
     }
 
-    static inline void ref_args_from_jvalues(JNIEnv* env, jvalue*) {}
+    static inline void ref_args_from_jvalues(JNIEnv*, jvalue*) {}
     template<typename Arg, typename... Args>
     void ref_args_from_jvalues(JNIEnv* env, jvalue *jargs, Arg& arg, Args&&... args) {
         set_ref_from_jvalue(env, jargs, arg);
@@ -918,7 +918,7 @@ jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref) {
     else
         arr = make_jarray(env, c0, N);
     if (!is_ref) {
-        if (std::is_fundamental<T>::value) {
+        if (std::is_arithmetic<T>::value) {
             set_jarray(env, arr, 0, N, c0);
         } else { // string etc. must convert to jobject
             for (std::size_t i = 0; i < N; ++i)
