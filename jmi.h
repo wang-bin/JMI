@@ -1,6 +1,7 @@
 /*
  * JMI: JNI Modern Interface
  * Copyright (C) 2016-2018 Wang Bin - wbsecg1@gmail.com
+ * https://github.com/wang-bin/JMI
  * MIT License
  */
 // TODO: reset error before each call, reset exception after each call (Aspect pattern?)
@@ -26,7 +27,7 @@ jstring from_string(const std::string& s, JNIEnv* env = nullptr);
 
 namespace android {
 // current android/app/Application object containing a local ref
-jobject application(JNIEnv* env = nullptr);
+jobject application(JNIEnv* env = nullptr); // TODO: return LocalRef
 } // namespace android
 
 struct ClassTag {}; // used by JObject<Tag>. subclasses must define static std::string() name(), with or without "L ;" around
@@ -34,7 +35,10 @@ struct MethodTag {}; // used by call() and callStatic(). subclasses must define 
 struct FieldTag {}; // subclasses must define static const char* name();
 
 namespace detail {
-// TODO: if_XXX, if_XXX_t, if_XXX_v    
+// TODO: if_XXX, if_XXX_t, if_XXX_v
+template<class T>
+using if_jobject = typename std::enable_if<std::is_base_of<typename std::remove_pointer<jobject>::type, typename std::remove_pointer<T>::type>::value, bool>::type;
+
 template<class Tag>
 using if_ClassTag = typename std::enable_if<std::is_base_of<ClassTag, Tag>::value, bool>::type;
 template<class Tag>
@@ -53,6 +57,38 @@ template<typename T> struct signature;
 // string signature_of(T) returns signature of object of type T, signature_of() returns signature of void type
 // signature of function ptr
 template<typename R, typename... Args> std::string signature_of(R(*)(Args...));
+
+class LocalRef {
+public:
+    template<typename J, detail::if_jobject<J> = true>
+    LocalRef(J j, JNIEnv* env = nullptr) : j_(j), env_(env) {}
+
+    LocalRef(const LocalRef&) = delete;
+    LocalRef& operator=(const LocalRef&) = delete;
+    LocalRef(LocalRef&& that) : j_(that.j_), env_(that.env_) { that.j_ = nullptr;}
+    LocalRef& operator=(LocalRef&& that) {
+        std::swap(j_, that.j_);
+        std::swap(env_, that.env_);
+        return *this;
+    }
+    ~LocalRef() {
+        if (!j_)
+            return;
+        if (!env_)
+            env_ = getEnv();
+        env_->DeleteLocalRef(j_);
+    }
+
+    explicit operator bool() const { return !!j_; }
+    template<typename J, detail::if_jobject<J> = true>
+    operator J() const {return static_cast<J>(j_);}
+    template<typename J, detail::if_jobject<J> = true>
+    J get() const {return static_cast<J>(j_);}
+private:
+    jobject j_ = nullptr;
+    JNIEnv* env_ = nullptr;
+};
+
 // object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
 template<class CTag>
 class JObject : public ClassTag
@@ -72,6 +108,7 @@ public:
         if (obj && del_localref)
             env->DeleteLocalRef(obj);
     }
+    // TODO: construct from LocalRef
     JObject(const JObject &other) { reset(other.id()).setError(other.error()); }
     JObject &operator=(const JObject &other) {
         if (this == &other)
@@ -222,9 +259,9 @@ private:
 //template<class CTag> inline std::string signature_of(const JObject<CTag>& t) { return t.signature();} // won't work if JObject subclass inherits JObject<...>
 template<class T, detail::if_JObject<T> = true>
 inline std::string signature_of(const T& t) { return t.signature();}
+// if T is jobject or LocalRef, signature can get from GetObjectClass=>getName, but can not be cached
 
 //signature_of_args<decltype(Args)...>::value, template<typename ...A> struct signature_of_args?
-
 template<> struct signature<jboolean> { static const char value = 'Z';};
 template<> struct signature<jbyte> { static const char value = 'B';};
 template<> struct signature<jchar> { static const char value = 'C';};
@@ -385,9 +422,8 @@ using namespace std;
     template<typename T, if_JObject<T> = true>
     void from_jarray(JNIEnv* env, const jvalue& v, T* t, size_t N) {
         for (size_t i = 0; i < N; ++i) {
-            jobject s = env->GetObjectArrayElement(static_cast<jobjectArray>(v.l), i);
+            LocalRef s = {env->GetObjectArrayElement(static_cast<jobjectArray>(v.l), i), env};
             (t + i)->reset(s);
-            env->DeleteLocalRef(s);
         }
     }
     // env can be null for base types
@@ -424,11 +460,8 @@ using namespace std;
     }
     static inline void delete_array_local_ref(JNIEnv* env, jarray a, size_t n, bool delete_elements) {
         if (delete_elements) {
-            for (jsize i = 0; i < jsize(n); ++i) {
-                jobject ei = env->GetObjectArrayElement(jobjectArray(a), i);
-                if (ei)
-                    env->DeleteLocalRef(ei);
-            }
+            for (jsize i = 0; i < jsize(n); ++i)
+                LocalRef ei = {env->GetObjectArrayElement(jobjectArray(a), i), env};
         }
         env->DeleteLocalRef(a);
     }
@@ -894,11 +927,9 @@ jclass JObject<CTag>::classId(JNIEnv* env) {
             if (!env)
                 return c;
         }
-        const jclass cid = (jclass)env->FindClass(className().c_str());
-        if (cid) {
-            c = (jclass)env->NewGlobalRef(cid); // cache per (c++/java)class class id
-            env->DeleteLocalRef(cid); // can not use c
-        }
+        LocalRef cid = {env->FindClass(className().c_str()), env};
+        if (cid)
+            c = static_cast<jclass>(env->NewGlobalRef(cid)); // cache per (c++/java)class class id
     }
     return c;
 }

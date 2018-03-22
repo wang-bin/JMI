@@ -1,6 +1,7 @@
 /*
  * JMI: JNI Modern Interface
  * Copyright (C) 2016-2018 Wang Bin - wbsecg1@gmail.com
+ * https://github.com/wang-bin/JMI
  * MIT License
  */
 #include "jmi.h"
@@ -36,6 +37,8 @@ JNIEnv *getEnv() {
     if (JNI_OK == status)
         return env;
     if (status != JNI_EDETACHED) {
+        if (status == JNI_EVERSION)
+            cerr << "requested JNI version is not supported";
         cerr << "GetEnv error: " << status << endl;
         return nullptr;
     }
@@ -107,14 +110,11 @@ jobject application(JNIEnv* env)
 {
     if (!env)
         env = jmi::getEnv();
-    jclass c_at = env->FindClass("android/app/ActivityThread");
+    LocalRef c_at = {env->FindClass("android/app/ActivityThread"), env};
     static jmethodID m_cat = env->GetStaticMethodID(c_at, "currentActivityThread", "()Landroid/app/ActivityThread;");
     static jmethodID m_ga = env->GetMethodID(c_at, "getApplication", "()Landroid/app/Application;");
-    jobject at = env->CallStaticObjectMethod(c_at, m_cat);
-    env->DeleteLocalRef(c_at);
-    jobject app = env->CallObjectMethod(at, m_ga);
-    env->DeleteLocalRef(at);
-    return app;
+    LocalRef at = {env->CallStaticObjectMethod(c_at, m_cat), env};
+    return env->CallObjectMethod(at, m_ga);
 }
 } // namespace android
 
@@ -373,9 +373,8 @@ template<> void from_jarray(JNIEnv* env, const jvalue& v, char* t, std::size_t N
 template<> void from_jarray(JNIEnv* env, const jvalue& v, std::string* t, std::size_t N)
 {
     for (size_t i = 0; i < N; ++i) {
-        jobject s = env->GetObjectArrayElement(static_cast<jobjectArray>(v.l), i);
-        *(t + i) = to_string(jstring(s));
-        env->DeleteLocalRef(s);
+        LocalRef s = {env->GetObjectArrayElement(static_cast<jobjectArray>(v.l), i), env};
+        *(t + i) = to_string(s);
     }
 }
 
@@ -459,9 +458,8 @@ void set_field(JNIEnv* env, jobject oid, jfieldID fid, jdouble&& v) {
 }
 template<>
 void set_field(JNIEnv* env, jobject oid, jfieldID fid, std::string&& v) {
-    jstring js = from_string(v, env);
+    LocalRef js = {from_string(v, env), env};
     set_field(env, oid, fid, jobject(js));
-    env->DeleteLocalRef(js);
 }
 
 ////////// Static Field //////////
@@ -544,9 +542,8 @@ void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jdouble&& v) {
 }
 template<>
 void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, std::string&& v) {
-    jstring js = from_string(v);
-    set_static_field(env, cid, fid, jobject(js));
-    env->DeleteLocalRef(js);
+    LocalRef js = {from_string(v), env};
+    set_static_field(env, cid, fid, (jobject)js);
 }
 } // namespace detail
 } //namespace jmi
