@@ -111,7 +111,8 @@ public:
         if (obj && del_localref)
             env->DeleteLocalRef(obj);
     }
-    // TODO: construct from LocalRef
+    JObject(LocalRef&& ref) : JObject((jobject)ref, false) {}
+    JObject(const LocalRef& ref) = delete; // required
     JObject(const JObject &other) { reset(other.id()).setError(other.error()); }
     JObject &operator=(const JObject &other) {
         if (this == &other)
