@@ -335,15 +335,7 @@ inline std::string signature_of(const std::reference_wrapper<T[N]>&) {
 
 namespace detail {
 using namespace std;
-    static inline bool handle_exception(JNIEnv* env = nullptr) { //'static' function 'handle_exception' declared in header file should be declared 'static inline' [-Wunneeded-internal-declaration]
-        if (!env)
-            env = getEnv();
-        if (!env->ExceptionCheck())
-            return false;
-        env->ExceptionDescribe();
-        env->ExceptionClear();
-        return true;
-    }
+    bool handle_exception(JNIEnv* env = nullptr);
 
     template<class F>
     class scope_exit_handler {

@@ -29,7 +29,7 @@ JavaVM* javaVM(JavaVM *vm, jint v) {
 JNIEnv *getEnv() {
     assert(javaVM() && "javaVM() is null");
     if (!javaVM()) {
-        cerr << "java vm is null" << endl;
+        clog << "JMI ERROR: java vm is null" << endl;
         return nullptr;
     }
     JNIEnv* env = nullptr;
@@ -38,8 +38,8 @@ JNIEnv *getEnv() {
         return env;
     if (status != JNI_EDETACHED) {
         if (status == JNI_EVERSION)
-            cerr << "requested JNI version is not supported";
-        cerr << "GetEnv error: " << status << endl;
+            clog << "JMI ERROR: requested JNI version is not supported";
+        clog << "JMI ERROR: GetEnv " << status << endl;
         return nullptr;
     }
     static pthread_key_t key_ = 0; // static var can be captured in lambda
@@ -58,12 +58,12 @@ JNIEnv *getEnv() {
                 return; //
             int status = javaVM()->DetachCurrentThread();
             if (status != JNI_OK)
-                cerr <<  "DetachCurrentThread error: " << status << endl;
+                clog <<  "JMI ERROR: DetachCurrentThread " << status << endl;
         });
     });
     env = (JNIEnv*)pthread_getspecific(key_);
     if (env)
-        cerr << "TLS has a JNIEnv* but not attatched. Maybe detatched by user." << endl;
+        clog << "JMI ERROR: TLS has a JNIEnv* but not attatched. Maybe detatched by user." << endl;
     JavaVMAttachArgs aa{};
     aa.version = jni_ver;
 #ifdef OS_ANDROID
@@ -72,11 +72,11 @@ JNIEnv *getEnv() {
     status = javaVM()->AttachCurrentThread((void**)&env, &aa);
 #endif
     if (status != JNI_OK) {
-        cerr << "AttachCurrentThread failed: " << status << endl;
+        clog << "JMI ERROR: AttachCurrentThread " << status << endl;
         return nullptr;
     }
     if (pthread_setspecific(key_, env) != 0) {
-        cerr << "failed to set tls JNIEnv data" << endl;
+        clog << "JMI ERROR: failed to set tls JNIEnv data" << endl;
         javaVM()->DetachCurrentThread();
         return nullptr;
     }
@@ -119,6 +119,16 @@ jobject application(JNIEnv* env)
 } // namespace android
 
 namespace detail {
+bool handle_exception(JNIEnv* env) { //'static' function 'handle_exception' declared in header file should be declared 'static inline' [-Wunneeded-internal-declaration]
+    if (!env)
+        env = getEnv();
+    if (!env->ExceptionCheck())
+        return false;
+    env->ExceptionDescribe();
+    env->ExceptionClear();
+    return true;
+}
+
 template<>
 jobject call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return env->CallObjectMethodA(obj_id, methodId, args);
