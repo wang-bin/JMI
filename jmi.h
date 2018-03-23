@@ -36,8 +36,11 @@ struct FieldTag {}; // subclasses must define static const char* name();
 
 namespace detail {
 // TODO: if_XXX, if_XXX_t, if_XXX_v
+// using var template requires c++14
 template<class T>
-using if_jobject = typename std::enable_if<std::is_base_of<typename std::remove_pointer<jobject>::type, typename std::remove_pointer<T>::type>::value, bool>::type;
+struct is_iobject : std::integral_constant<bool, std::is_base_of<typename std::remove_pointer<jobject>::type, typename std::remove_pointer<T>::type>::value> {};
+template<class T>
+using if_jobject = typename std::enable_if<is_iobject<T>::value, bool>::type;
 
 template<class Tag>
 using if_ClassTag = typename std::enable_if<std::is_base_of<ClassTag, Tag>::value, bool>::type;
@@ -65,8 +68,8 @@ public:
 
     LocalRef(const LocalRef&) = delete;
     LocalRef& operator=(const LocalRef&) = delete;
-    LocalRef(LocalRef&& that) : j_(that.j_), env_(that.env_) { that.j_ = nullptr;}
-    LocalRef& operator=(LocalRef&& that) {
+    LocalRef(LocalRef&& that) : j_(that.j_), env_(that.env_) { that.j_ = nullptr;}  // total ref obj is 1
+    LocalRef& operator=(LocalRef&& that) {  // total ref obj is 2, or delete 1 here
         std::swap(j_, that.j_);
         std::swap(env_, that.env_);
         return *this;
@@ -439,7 +442,7 @@ using namespace std;
     template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, array<T, N> &t) { return from_jarray(env, v, t.data(), N); }
     //template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { return from_jarray(env, v, t, N); }
 
-    template<typename T> struct has_local_ref {
+    template<typename T> struct has_local_ref { // is_jobject<T>?
         static const bool value = !is_arithmetic<T>::value && !is_pointer<T>::value && !is_JObject<T>::value;
     };
     template<typename T>
