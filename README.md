@@ -40,6 +40,12 @@
     texture.call("updateTexImage");
 ```
 
+or
+
+```
+    texture.call<void>("updateTexImage");
+```
+
 - Call method with output parameters:
 ```
     float mat4[16]; // or std::array<float, 16>, valarray<float>
@@ -61,7 +67,7 @@
     struct GetTimestamp : jmi::MethodTag { static const char* name() {return "getTimestamp";}};
     struct GetTransformMatrix : jmi::MethodTag { static const char* name() {return "getTransformMatrix";}};
     ...
-    texture.call<UpdateTexImage>();
+    texture.call<UpdateTexImage>(); // or texture.call<void,UpdateTexImage>();
     jlong t = texture.call<jlong, GetTimestamp>();
     texture.call<GetTransformMatrix>(std::ref(mat4)); // use std::ref() if parameter should be modified by jni method
 ```
@@ -128,6 +134,12 @@ You may find that a macro can simplify above example:
     }
 ```
 
+### Convenience Functions
+- to_string(std::string)
+- from_string(jstring)
+- getEnv()
+- android::application()
+
 ### Known Issues
 
 - If return type and first n arguments of call/call_static are the same, explicitly specifying return type and n arguments type is required
@@ -140,5 +152,5 @@ You may find that a macro can simplify above example:
 g++ >= 4.9, clang >= 3.4.2
 
 #### MIT License
->Copyright (c) 2016-2017 WangBin
+>Copyright (c) 2016-2018 WangBin
 

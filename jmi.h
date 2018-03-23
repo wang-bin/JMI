@@ -289,6 +289,10 @@ inline std::string signature_of(const char*) { return "Ljava/lang/String;";}
 inline std::string signature_of(char*) { return "Ljava/lang/String;";}
 inline std::string signature_of() { return {'V'};}
 // for base types, {'[', signature<T>::value};
+// signature_of_no_ptr: consistent for any type, including void. so for call<T,MT>(...) T can be void.
+template<class T>
+std::string signature_of_no_ptr(T*) { return signature_of(T());}
+inline std::string signature_of_no_ptr(void*) { return signature_of();}
 
 template<typename T, std::size_t N>
 inline std::string signature_of(const std::array<T, N>&) {
@@ -731,7 +735,7 @@ template<class CTag>
 template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
 T JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
-    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of_no_ptr(typename std::add_pointer<T>::type()));
     static jmethodID mid = nullptr;
     return call_with_methodID<T>(oid_, classId(), &mid, [this](std::string&& err){ setError(std::move(err));}, s, MTag::name(), std::forward<Args>(args)...);
 }
@@ -747,7 +751,7 @@ template<class CTag>
 template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
 T JObject<CTag>::callStatic(Args&&... args) {
     using namespace detail;
-    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of_no_ptr(typename std::add_pointer<T>::type()));
     static jmethodID mid = nullptr;
     return call_static_with_methodID<T>(classId(), &mid, nullptr, s, MTag::name(), std::forward<Args>(args)...);
 }
@@ -800,7 +804,7 @@ template<class CTag>
 template<typename T, typename... Args>
 T JObject<CTag>::call(const std::string &methodName, Args&&... args) const {
     using namespace detail;
-    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of_no_ptr(typename std::add_pointer<T>::type()));
     return call_with_methodID<T>(oid_, classId(), nullptr, [this](std::string&& err){ setError(std::move(err));}, s, methodName.c_str(), std::forward<Args>(args)...);
 }
 template<class CTag>
@@ -814,7 +818,7 @@ template<class CTag>
 template<typename T, typename... Args>
 T JObject<CTag>::callStatic(const std::string &name, Args&&... args) {
     using namespace detail;
-    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of(T()));
+    static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of_no_ptr(typename std::add_pointer<T>::type()));
     return call_static_with_methodID<T>(classId(), nullptr, nullptr, s, name.c_str(), std::forward<Args>(args)...);
 }
 template<class CTag>
