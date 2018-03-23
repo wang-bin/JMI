@@ -151,6 +151,10 @@ You may find that a macro can simplify above example:
 
 g++ >= 4.9, clang >= 3.4.2
 
+### TODO
+- some C++ classes for frequently used java classes
+- modern C++ class generator script
+
 #### MIT License
 >Copyright (c) 2016-2018 WangBin
 

@@ -16,13 +16,15 @@ using namespace jmi;
 
 void JMITestCached::setX(int v)
 {
-	struct SetX : MethodTag { static const char* name() {return "setX";}};
+	constexpr const char* MethodName = __FUNCTION__;
+	struct SetX : MethodTag { static const char* name() {return MethodName;}};
 	call<SetX>(v);
 }
 
 int JMITestCached::getX() const
 {
-	struct GetX : MethodTag { static const char* name() {return "getX";}};
+	constexpr const char* MethodName = __FUNCTION__;
+	struct GetX : MethodTag { static const char* name() {return MethodName;}};
 	return call<int, GetX>();
 }
 
@@ -69,36 +71,39 @@ void JMITestCached::getIntArray(int v[2]) const
 
 void JMITestCached::getIntArray(std::array<int, 2>& v) const
 {
-	struct Get : MethodTag { static const char* name() {return "getIntArray";}};
+	constexpr const char* MethodName = __FUNCTION__;
+	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	call<Get>(std::ref(v));
 }
 
 JMITestCached JMITestCached::getSelf() const
 {
-	struct Get : MethodTag { static const char* name() {return "getSelf";}};
+	constexpr const char* MethodName = __FUNCTION__;
+	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return call<JMITestCached, Get>();
 }
 
 void JMITestCached::getSelfArray(array<JMITestCached,2> &v) const
 {
-	struct Get : MethodTag { static const char* name() {return "getSelfArray";}};
+	constexpr const char* MethodName = __FUNCTION__;
+	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return call<Get>(std::ref(v));
 }
 
 
 void JMITestUncached::setX(int v)
 {
-	obj.call("setX", v);
+	obj.call(__FUNCTION__, v);
 }
 
 int JMITestUncached::getX() const
 {
-	return obj.call<int>("getX");
+	return obj.call<int>(__FUNCTION__);
 }
 
 void JMITestUncached::setY(int v)
 {
-	JObject<JMITestClassTag>::callStatic("setY", v);
+	JObject<JMITestClassTag>::callStatic(__FUNCTION__, v);
 }
 
 int JMITestUncached::getY()
