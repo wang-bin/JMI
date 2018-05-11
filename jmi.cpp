@@ -50,7 +50,7 @@ JNIEnv *getEnv() {
 #else
         printf(
 #endif
-        "JMI: JNI Modern Interface\n");
+        "JMI: JNI Modern Interface. Version %d.%d.%d\n", JMI_MAJOR, JMI_MINOR, JMI_PATCH);
 
         pthread_key_create(&key_, [](void*){
             JNIEnv* env = nullptr;

@@ -17,6 +17,9 @@
 
 namespace jmi {
 /*************************** JMI Public APIs Begin ***************************/
+#define JMI_MAJOR 0
+#define JMI_MINOR 0
+#define JMI_PATCH 1
 
 // set JavaVM to vm if not null. return previous JavaVM
 JavaVM* javaVM(JavaVM *vm = nullptr, jint version = JNI_VERSION_1_4);
@@ -41,6 +44,8 @@ template<class T>
 struct is_iobject : std::integral_constant<bool, std::is_base_of<typename std::remove_pointer<jobject>::type, typename std::remove_pointer<T>::type>::value> {};
 template<class T>
 using if_jobject = typename std::enable_if<is_iobject<T>::value, bool>::type;
+template<class T>
+using if_not_jobject = typename std::enable_if<!is_iobject<T>::value, bool>::type;
 
 template<class Tag>
 using if_ClassTag = typename std::enable_if<std::is_base_of<ClassTag, Tag>::value, bool>::type;
