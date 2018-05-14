@@ -43,14 +43,21 @@ namespace detail {
 template<class T>
 struct is_iobject : std::integral_constant<bool, std::is_base_of<typename std::remove_pointer<jobject>::type, typename std::remove_pointer<T>::type>::value> {};
 template<class T>
+struct is_jarray : std::integral_constant<bool, std::is_base_of<typename std::remove_pointer<jarray>::type, typename std::remove_pointer<T>::type>::value> {};
+
+template<class T>
 using if_jobject = typename std::enable_if<is_iobject<T>::value, bool>::type;
 template<class T>
 using if_not_jobject = typename std::enable_if<!is_iobject<T>::value, bool>::type;
+template<class T>
+using if_jarray = typename std::enable_if<is_jarray<T>::value, bool>::type;
+template<class T>
+using if_not_jarray = typename std::enable_if<!is_jarray<T>::value, bool>::type;
 
 template<class Tag>
 using if_ClassTag = typename std::enable_if<std::is_base_of<ClassTag, Tag>::value, bool>::type;
 template<class Tag>
-using  if_MethodTag = typename std::enable_if<std::is_base_of<MethodTag, Tag>::value, bool>::type;
+using if_MethodTag = typename std::enable_if<std::is_base_of<MethodTag, Tag>::value, bool>::type;
 template<class Tag>
 using if_FieldTag = typename std::enable_if<std::is_base_of<FieldTag, Tag>::value, bool>::type;
 template<class T> struct is_JObject : std::is_base_of<ClassTag, T>::type {}; // TODO: is_detected<signature>
@@ -271,6 +278,7 @@ inline std::string signature_of(const T& t) { return t.signature();}
 // if T is jobject or LocalRef, signature can get from GetObjectClass=>getName, but can not be cached
 
 //signature_of_args<decltype(Args)...>::value, template<typename ...A> struct signature_of_args?
+template<> struct signature<bool> { static const char value = 'Z';}; // jboolean is uint8_t/uchar
 template<> struct signature<jboolean> { static const char value = 'Z';};
 template<> struct signature<jbyte> { static const char value = 'B';};
 template<> struct signature<jchar> { static const char value = 'C';};
@@ -279,6 +287,14 @@ template<> struct signature<jlong> { static const char value = 'J';};
 template<> struct signature<jint> { static const char value = 'I';};
 template<> struct signature<jfloat> { static const char value = 'F';};
 template<> struct signature<jdouble> { static const char value = 'D';};
+template<> struct signature<jbooleanArray> { constexpr static const char* value = "[Z";};
+template<> struct signature<jbyteArray> { constexpr static const char* value = "[B";};
+template<> struct signature<jcharArray> { constexpr static const char* value = "[C";};
+template<> struct signature<jshortArray> { constexpr static const char* value = "[S";};
+template<> struct signature<jintArray> { constexpr static const char* value = "[I";};
+template<> struct signature<jlongArray> { constexpr static const char* value = "[J";};
+template<> struct signature<jfloatArray> { constexpr static const char* value = "[F";};
+template<> struct signature<jdoubleArray> { constexpr static const char* value = "[D";};
 // "L...;" is used in method parameter
 template<> struct signature<std::string> { constexpr static const char* value = "Ljava/lang/String;";};
 template<> struct signature<char*> { constexpr static const char* value = "Ljava/lang/String;";};
@@ -306,21 +322,23 @@ inline std::string signature_of(const std::array<T, N>&) {
     return s;
 }
 
-template<typename T, if_pointer<T> = true>
+template<typename T, if_pointer<T> = true, detail::if_not_jarray<T> = true>
 inline std::string signature_of(const T&) { return {signature<jlong>::value};}
+template<typename T, if_pointer<T> = true, detail::if_jarray<T> = true>
+inline std::string signature_of(const T&) { return {signature<T>::value};}
 template<typename T, std::size_t N>
 inline std::string signature_of(const T(&)[N]) { 
     static const auto s = std::string({'['}).append({signature_of(T())});
     return s;
 }
 
-template<template<typename, class...> class C, typename T, class... Args> struct is_jarray;
-template<typename T, class... Args> struct is_jarray<std::vector, T, Args...> : public std::true_type {};
-template<typename T, class... Args> struct is_jarray<std::valarray, T, Args...> : public std::true_type {};
+template<template<typename, class...> class C, typename T, class... Args> struct is_jarray_cpp;
+template<typename T, class... Args> struct is_jarray_cpp<std::vector, T, Args...> : public std::true_type {};
+template<typename T, class... Args> struct is_jarray_cpp<std::valarray, T, Args...> : public std::true_type {};
 // exclude std::string but not all basic_string becase no corresponding java type for wstring
-template<class... Args> struct is_jarray<std::basic_string, char, Args...> : public std::false_type {};
-template<template<typename, class...> class C, typename T, class... Args> using if_jarray = typename std::enable_if<is_jarray<C, T, Args...>::value, bool>::type;
-template<template<typename, class...> class C, typename T, class... Args, if_jarray<C, T, Args...> = true>
+template<class... Args> struct is_jarray_cpp<std::basic_string, char, Args...> : public std::false_type {};
+template<template<typename, class...> class C, typename T, class... Args> using if_jarray_cpp = typename std::enable_if<is_jarray_cpp<C, T, Args...>::value, bool>::type;
+template<template<typename, class...> class C, typename T, class... Args, if_jarray_cpp<C, T, Args...> = true>
 inline std::string signature_of(const C<T, Args...>&) {
     static const std::string s = std::string({'['}).append({signature_of(T())});
     return s;
@@ -402,20 +420,20 @@ using namespace std;
     jarray to_jarray(JNIEnv* env, const T(&c)[N], bool is_ref = false) {
         return to_jarray(env, c[0], N, is_ref);
     }
-    template<typename C> // c++ container (vector, valarray, array) to jarray. no if_jarray check (requires overload for both vector like and array like containers) because it's checked by to_jvalue
+    template<typename C> // c++ container (vector, valarray, array) to jarray. no if_jarray_cpp check (requires overload for both vector like and array like containers) because it's checked by to_jvalue
     jarray to_jarray(JNIEnv* env, const C &c, bool is_ref = false) {
         return to_jarray(env, c[0], c.size(), is_ref);
     }
     // env can be null for base types
     template<typename T> jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr);
-    template<typename T> jvalue to_jvalue(T *obj, JNIEnv* env) { return to_jvalue((jlong)obj, env); } // jobject is _jobject*?
+    template<typename T> jvalue to_jvalue(T *obj, JNIEnv* env) { return to_jvalue((jlong)obj, env); } // works for jobject
     jvalue to_jvalue(const char* obj, JNIEnv* env);// { return to_jvalue(string(obj)); }
-    template<template<typename,class...> class C, typename T, class... A, if_jarray<C, T, A...> = true> // if_jarray: exclude std::string, jarray works (copy chars)
+    template<template<typename,class...> class C, typename T, class... A, if_jarray_cpp<C, T, A...> = true> // if_jarray_cpp: exclude std::string, jarray works (copy chars)
     jvalue to_jvalue(const C<T, A...> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
     template<typename T, size_t N> jvalue to_jvalue(const array<T, N> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
 
     template<typename T> jvalue to_jvalue(const reference_wrapper<T>& t, JNIEnv* env) { return to_jvalue(t.get(), env); } // TODO: no jvalue set
-    template<template<typename,class...> class C, typename T, class... A, if_jarray<C, T, A...> = true> // if_jarray: exclude std::string, jarray works (copy chars)
+    template<template<typename,class...> class C, typename T, class... A, if_jarray_cpp<C, T, A...> = true> // if_jarray_cpp: exclude std::string, jarray works (copy chars)
     jvalue to_jvalue(const reference_wrapper<C<T, A...>>& c, JNIEnv* env) { return to_jvalue(to_jarray(env, c.get(), true), env); }
     template<typename T, size_t N> jvalue to_jvalue(const reference_wrapper<T[N]>& c, JNIEnv* env) { return to_jvalue(to_jarray<T,N>(env, c.get(), true), env); }
     template<class CTag>
@@ -439,7 +457,7 @@ using namespace std;
         else
             from_jarray(env, v, t, n);
     }
-    template<template<typename,class...> class C, typename T, class... A, if_jarray<C, T, A...> = true> // if_jarray: exclude std::string. jarray works too (copy chars)
+    template<template<typename,class...> class C, typename T, class... A, if_jarray_cpp<C, T, A...> = true> // if_jarray_cpp: exclude std::string. jarray works too (copy chars)
     void from_jvalue(JNIEnv* env, const jvalue& v, C<T, A...> &t) { from_jarray(env, v, &t[0], t.size()); }
     template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, array<T, N> &t) { return from_jarray(env, v, t.data(), N); }
     //template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { return from_jarray(env, v, t, N); }
@@ -470,7 +488,7 @@ using namespace std;
         }
         env->DeleteLocalRef(a);
     }
-    template<template<typename,class...> class C, typename T, class... A, if_jarray<C, T, A...> = true> // if_jarray: exclude std::string, jarray works (copy chars)
+    template<template<typename,class...> class C, typename T, class... A, if_jarray_cpp<C, T, A...> = true> // if_jarray_cpp: exclude std::string, jarray works (copy chars)
     void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<C<T, A...>> ref) {
         from_jvalue(env, *jargs, ref.get());
         using Tn = typename remove_reference<T>::type;

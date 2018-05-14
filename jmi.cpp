@@ -227,12 +227,7 @@ template<> jvalue to_jvalue(const jint &obj, JNIEnv* env) { return jvalue{.i = o
 template<> jvalue to_jvalue(const jlong &obj, JNIEnv* env) { return jvalue{.j = obj};}
 template<> jvalue to_jvalue(const jfloat &obj, JNIEnv* env) { return jvalue{.f = obj};}
 template<> jvalue to_jvalue(const jdouble &obj, JNIEnv* env) { return jvalue{.d = obj};}
-#if 0
-// to_jvalue(T*, JNIEnv* env) will be choosed and treating jobject as jlong works
-template<> jvalue to_jvalue(const jobject &obj, JNIEnv* env) { return jvalue{.l = obj};}
-template<> jvalue to_jvalue(const jarray &obj, JNIEnv* env) { return jvalue{.l = obj};}
-template<> jvalue to_jvalue(const jstring &obj, JNIEnv* env) { return jvalue{.l = obj};}
-#endif
+
 template<> jvalue to_jvalue(const std::string &obj, JNIEnv* env) {
     return to_jvalue(obj.c_str(), env);
 }

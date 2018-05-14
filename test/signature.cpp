@@ -21,6 +21,8 @@ jint JNI_OnLoad(JavaVM* vm, void*)
     return JNI_VERSION_1_4;
 }
 
+int write(jfloatArray, jint, jint) {return 0;}
+
 void test1(int, const char* const, vector<jboolean>) {}
 int test2() {return 0;}
 std::string test3() {return string();}
@@ -29,6 +31,7 @@ int main(int argc, char *argv[])
 {
     cout << "jmi test" << endl;
 
+    cout << jmi::signature_of(write) << std::endl;
     cout << jmi::signature_of(1.2f) << endl;
     cout << jmi::signature_of(std::string()) << endl;
     std::valarray<float> f;
