@@ -68,7 +68,7 @@ using if_not_JObject = typename std::enable_if<!is_JObject<T>::value, bool>::typ
 }
 //template<typename T> // jni primitive types(not all c++ arithmetic types?), jobject, jstring, ..., JObject, c++ array types
 //using if_jni_type = typename std::enable_if<std::is_arithmetic<T>::value || if_array<T>::value || is_same<T,jobject> || ... || is_JObject<T>::value
-template<typename T> struct signature;
+template<typename T, bool = std::is_enum<T>::value> struct signature;
 // string signature_of(T) returns signature of object of type T, signature_of() returns signature of void type
 // signature of function ptr
 template<typename R, typename... Args> std::string signature_of(R(*)(Args...));
@@ -298,6 +298,9 @@ template<> struct signature<jdoubleArray> { constexpr static const char* value =
 // "L...;" is used in method parameter
 template<> struct signature<std::string> { constexpr static const char* value = "Ljava/lang/String;";};
 template<> struct signature<char*> { constexpr static const char* value = "Ljava/lang/String;";};
+// TODO: function type
+template<typename E>
+struct signature<E, true> : signature<jint>{};
 
 // T* and T(&)[N] are treated as the same. use enable_if to select 1 of them. The function parameter is (const T&), so the default implementation of signature_of(const T&) must check is_pointer too.
 template<typename T> using if_pointer = typename std::enable_if<std::is_pointer<T>::value, bool>::type;
@@ -425,7 +428,13 @@ using namespace std;
         return to_jarray(env, c[0], c.size(), is_ref);
     }
     // env can be null for base types
-    template<typename T> jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr);
+    template<typename T>
+    using if_enum = typename std::enable_if<std::is_enum<T>::value, bool>::type;
+    template<typename T>
+    using if_not_enum = typename std::enable_if<!std::is_enum<T>::value, bool>::type;
+    template<typename T, if_not_enum<T> = true> jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr);
+    template<typename T, if_enum<T> = true>
+    jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr) {return to_jvalue((jint)obj, env);}
     template<typename T> jvalue to_jvalue(T *obj, JNIEnv* env) { return to_jvalue((jlong)obj, env); } // works for jobject
     jvalue to_jvalue(const char* obj, JNIEnv* env);// { return to_jvalue(string(obj)); }
     template<template<typename,class...> class C, typename T, class... A, if_jarray_cpp<C, T, A...> = true> // if_jarray_cpp: exclude std::string, jarray works (copy chars)
