@@ -38,21 +38,14 @@ struct MethodTag {}; // used by call() and callStatic(). subclasses must define 
 struct FieldTag {}; // subclasses must define static const char* name();
 
 namespace detail {
-// TODO: if_XXX, if_XXX_t, if_XXX_v
 // using var template requires c++14
 template<class T>
 struct is_iobject : std::integral_constant<bool, std::is_base_of<typename std::remove_pointer<jobject>::type, typename std::remove_pointer<T>::type>::value> {};
-template<class T>
-struct is_jarray : std::integral_constant<bool, std::is_base_of<typename std::remove_pointer<jarray>::type, typename std::remove_pointer<T>::type>::value> {};
 
 template<class T>
 using if_jobject = typename std::enable_if<is_iobject<T>::value, bool>::type;
 template<class T>
 using if_not_jobject = typename std::enable_if<!is_iobject<T>::value, bool>::type;
-template<class T>
-using if_jarray = typename std::enable_if<is_jarray<T>::value, bool>::type;
-template<class T>
-using if_not_jarray = typename std::enable_if<!is_jarray<T>::value, bool>::type;
 
 template<class Tag>
 using if_ClassTag = typename std::enable_if<std::is_base_of<ClassTag, Tag>::value, bool>::type;
@@ -325,10 +318,18 @@ inline std::string signature_of(const std::array<T, N>&) {
     return s;
 }
 
-template<typename T, if_pointer<T> = true, detail::if_not_jarray<T> = true>
+template<class T>
+struct is_jarray : std::integral_constant<bool, std::is_base_of<typename std::remove_pointer<jarray>::type, typename std::remove_pointer<T>::type>::value> {};
+template<class T>
+using if_jarray = typename std::enable_if<is_jarray<T>::value, bool>::type;
+template<class T>
+using if_not_jarray = typename std::enable_if<!is_jarray<T>::value, bool>::type;
+
+template<typename T, if_pointer<T> = true, if_not_jarray<T> = true>
 inline std::string signature_of(const T&) { return {signature<jlong>::value};}
-template<typename T, if_pointer<T> = true, detail::if_jarray<T> = true>
+template<typename T, if_pointer<T> = true, if_jarray<T> = true>
 inline std::string signature_of(const T&) { return {signature<T>::value};}
+
 template<typename T, std::size_t N>
 inline std::string signature_of(const T(&)[N]) { 
     static const auto s = std::string({'['}).append({signature_of(T())});
@@ -432,11 +433,15 @@ using namespace std;
     using if_enum = typename std::enable_if<std::is_enum<T>::value, bool>::type;
     template<typename T>
     using if_not_enum = typename std::enable_if<!std::is_enum<T>::value, bool>::type;
-    template<typename T, if_not_enum<T> = true> jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr);
-    template<typename T, if_enum<T> = true>
+    template<typename T, if_not_enum<T> = true, if_not_JObject<T> = true>
+    jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr);
+    template<typename T, if_enum<T> = true, if_not_JObject<T> = true>
     jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr) {return to_jvalue((jint)obj, env);}
     template<typename T> jvalue to_jvalue(T *obj, JNIEnv* env) { return to_jvalue((jlong)obj, env); } // works for jobject
     jvalue to_jvalue(const char* obj, JNIEnv* env);// { return to_jvalue(string(obj)); }
+    template<typename T, if_not_enum<T> = true, if_JObject<T> = true>
+    jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr) { return to_jvalue(jobject(obj), env);}
+
     template<template<typename,class...> class C, typename T, class... A, if_jarray_cpp<C, T, A...> = true> // if_jarray_cpp: exclude std::string, jarray works (copy chars)
     jvalue to_jvalue(const C<T, A...> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
     template<typename T, size_t N> jvalue to_jvalue(const array<T, N> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
@@ -484,7 +489,7 @@ using namespace std;
         env->DeleteLocalRef(jargs->l);
     }
     template<typename T>
-    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<T> ref) {
+    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<T> ref) {  // TODO: const T
         from_jvalue(env, *jargs, ref.get());
         using Tn = typename remove_reference<T>::type;
         if (has_local_ref<Tn>::value)
