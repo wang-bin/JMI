@@ -467,6 +467,7 @@ using namespace std;
     // reference_wrapper<const T> should do nothing
     template<typename T> void from_jvalue(JNIEnv* env, const jvalue& v, const T &t) {}
     // env can be null for base types
+    template<typename T, if_not_JObject<T> = true> void from_jvalue(JNIEnv* env, const jvalue& v, T &t);
     // reference_wrapper<const T[]> should do nothing
     template<typename T> void from_jvalue(JNIEnv* env, const jvalue& v, const T *t, size_t n = 0) {}
     template<typename T> void from_jvalue(JNIEnv* env, const jvalue& v, T *t, size_t n = 0) { // T* and T(&)[N] is the same
@@ -474,7 +475,10 @@ using namespace std;
             from_jvalue(env, v, (jlong&)t);
         else
             from_jarray(env, v, t, n);
-    }]
+    }
+    template<typename T, if_JObject<T> = true> void from_jvalue(JNIEnv* env, const jvalue& v, T &t) {
+        t.reset(v.l, env); // local ref will be deleted in caller set_ref_from_jvalue()
+    }
     template<template<typename,class...> class C, typename T, class... A, if_jarray_cpp<C, T, A...> = true> // if_jarray_cpp: exclude std::string. jarray works too (copy chars)
     void from_jvalue(JNIEnv* env, const jvalue& v, C<T, A...> &t) { from_jarray(env, v, &t[0], t.size()); }
     template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, array<T, N> &t) { from_jarray(env, v, t.data(), N); }
