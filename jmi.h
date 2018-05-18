@@ -454,6 +454,7 @@ using namespace std;
     jvalue to_jvalue(const JObject<CTag> &obj, JNIEnv* env);
     // T(&)[N]?
 
+    // from_jvalue/array() is called if parameter of call() is of type reference_wrapper<...>
     template<typename T, if_not_JObject<T> = true>
     void from_jarray(JNIEnv* env, const jvalue& v, T* t, size_t N);
     template<typename T, if_JObject<T> = true>
@@ -463,18 +464,21 @@ using namespace std;
             (t + i)->reset(s);
         }
     }
+    // reference_wrapper<const T> should do nothing
+    template<typename T> void from_jvalue(JNIEnv* env, const jvalue& v, const T &t) {}
     // env can be null for base types
-    template<typename T> void from_jvalue(JNIEnv* env, const jvalue& v, T &t);
+    // reference_wrapper<const T[]> should do nothing
+    template<typename T> void from_jvalue(JNIEnv* env, const jvalue& v, const T *t, size_t n = 0) {}
     template<typename T> void from_jvalue(JNIEnv* env, const jvalue& v, T *t, size_t n = 0) { // T* and T(&)[N] is the same
         if (n <= 0)
             from_jvalue(env, v, (jlong&)t);
         else
             from_jarray(env, v, t, n);
-    }
+    }]
     template<template<typename,class...> class C, typename T, class... A, if_jarray_cpp<C, T, A...> = true> // if_jarray_cpp: exclude std::string. jarray works too (copy chars)
     void from_jvalue(JNIEnv* env, const jvalue& v, C<T, A...> &t) { from_jarray(env, v, &t[0], t.size()); }
-    template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, array<T, N> &t) { return from_jarray(env, v, t.data(), N); }
-    //template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { return from_jarray(env, v, t, N); }
+    template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, array<T, N> &t) { from_jarray(env, v, t.data(), N); }
+    //template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { from_jarray(env, v, t, N); }
 
     template<typename T> struct has_local_ref { // is_jobject<T>?
         static const bool value = !is_arithmetic<T>::value && !is_pointer<T>::value && !is_JObject<T>::value;
@@ -762,7 +766,7 @@ bool JObject<CTag>::create(Args&&... args) {
 }
 
 template<class CTag>
-template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
+template<typename T, class MTag, typename... Args, detail::if_MethodTag<MTag>>
 T JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of_no_ptr(typename std::add_pointer<T>::type()));
@@ -770,7 +774,7 @@ T JObject<CTag>::call(Args&&... args) const {
     return call_with_methodID<T>(oid_, classId(), &mid, [this](std::string&& err){ setError(std::move(err));}, s, MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
-template<class MTag, typename... Args,  detail::if_MethodTag<MTag>>
+template<class MTag, typename... Args, detail::if_MethodTag<MTag>>
 void JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
     static const auto s = args_signature(std::forward<Args>(args)...).append(signature_of());
