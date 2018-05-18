@@ -19,7 +19,26 @@ public class JMITest {
     public static void getSStr(String[] s) {
         s[0] = " output  String[]";
     }
-    public void getIntArray(int[] a) {
+    public String[] getStrArray() {
+        String[] ss = new String[2];
+        ss[0] = str;
+        ss[1] = sstr;
+        return ss;
+    }
+    public static String[] getStrArrayS() {
+        String[] ss = new String[2];
+        ss[0] = sstr;
+        return ss;
+    }
+
+    public int[] getIntArray() {
+        int[] a = new int[2];
+        a[0] = 1;
+        a[1] = x;
+        return a;
+    }
+
+    public void getIntArrayAsParam(int[] a) {
         a[0] = 1;
         a[1] = x;
     }

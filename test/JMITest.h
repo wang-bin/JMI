@@ -1,4 +1,9 @@
+#pragma once
 #include "jmi.h"
+#include <array>
+#include <valarray>
+#include <vector>
+
 struct JMITestClassTag : jmi::ClassTag { static std::string name() { return "JMITest";} };
 class JMITestCached : public jmi::JObject<JMITestCached> // or jmi::JObject<JMITestClassTag>
 {
@@ -12,8 +17,11 @@ public:
     std::string getStr() const;
     // java array is of fixed size
     static void getSStr(std::array<std::string,1>& v);
-    void getIntArray(int v[2]) const;
-    void getIntArray(std::array<int, 2>& v) const;
+    static std::vector<std::string> getStrArrayS();
+    std::vector<std::string> getStrArray() const;
+    std::valarray<int> getIntArray() const;
+    void getIntArrayAsParam(int v[2]) const;
+    void getIntArrayAsParam(std::array<int, 2>& v) const;
     JMITestCached getSelf() const;
     void getSelfArray(std::array<JMITestCached,2>& v) const;
 };
@@ -29,8 +37,11 @@ public:
     void setStr(const std::string& v);
     std::string getStr() const;
 
-    void getIntArray(int v[2]) const;
-    void getIntArray(std::array<int, 2>& v) const;
+    static std::vector<std::string> getStrArrayS();
+    std::vector<std::string> getStrArray() const;
+    std::vector<int> getIntArray() const;
+    void getIntArrayAsParam(int v[2]) const;
+    void getIntArrayAsParam(std::array<int, 2>& v) const;
 private:
     jmi::JObject<JMITestClassTag> obj;
 };

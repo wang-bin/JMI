@@ -7,6 +7,7 @@
 #include "jmi.h"
 #include <cassert>
 #include <iostream>
+#include <vector>
 #include <pthread.h>
 #if defined(__ANDROID__) || defined(ANDROID)
 #define OS_ANDROID

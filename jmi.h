@@ -7,12 +7,9 @@
 // TODO: reset error before each call, reset exception after each call (Aspect pattern?)
 #pragma once
 #include <algorithm>
-#include <array>
 #include <functional> // std::ref
 #include <string>
 #include <type_traits>
-#include <valarray>
-#include <vector>
 #include <jni.h>
 
 namespace jmi {
@@ -309,7 +306,6 @@ template <typename T, typename = void>
 struct is_array_like : std::false_type {};
 template <typename T>
 struct is_array_like<T, void_t<decltype(std::declval<T>()[0]), decltype(std::declval<T>().size())>> : std::true_type {};
-
 template <typename T, typename = void>
 struct is_string : std::false_type {};
 template <typename T>
@@ -508,7 +504,7 @@ using namespace std;
         env->DeleteLocalRef(jargs->l);
     }
     template<typename T>
-    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<T> ref) {  // TODO: const T
+    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<T> ref) {  // do nothing in from_jvalue for const T
         from_jvalue(env, *jargs, ref.get());
         using Tn = typename remove_reference<T>::type;
         if (has_local_ref<Tn>::value)
@@ -545,12 +541,21 @@ using namespace std;
         ref_args_from_jvalues(env, jargs + 1, forward<Args>(args)...);
     }
 
-    template<typename T, if_not_JObject<T> = true>
+    template<typename T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
     T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args);
     template<class T, if_JObject<T> = true>
     T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args) {
         T t;
         t.reset(call_method<jobject>(env, oid, mid, args), env);
+        return t;
+    }
+    template<typename T, if_jarray_cpp<T> = true>
+    T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args) {
+        LocalRef ja = call_method<jobject>(env, oid, mid, args); // local ref will not be deleted in from_jvalue(), so manage here
+        jvalue jv;
+        jv.l = ja;
+        T t(env->GetArrayLength(ja));
+        from_jvalue(env, jv, t);
         return t;
     }
 
@@ -562,12 +567,21 @@ using namespace std;
        return call_method<T>(env, oid, mid, jargs);
     }
 
-    template<typename T, if_not_JObject<T> = true>
+    template<typename T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
     T call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args);
     template<class T, if_JObject<T> = true>
     T call_static_method(JNIEnv *env, jclass cid, jmethodID mid, jvalue *args) {
         T t;
         t.reset(call_static_method<jobject>(env, cid, mid, args), env);
+        return t;
+    }
+    template<class T, if_jarray_cpp<T> = true>
+    T call_static_method(JNIEnv *env, jclass cid, jmethodID mid, jvalue *args) {
+        LocalRef ja = call_static_method<jobject>(env, cid, mid, args); // local ref will not be deleted in from_jvalue(), so manage here
+        jvalue jv;
+        jv.l = ja;
+        T t(env->GetArrayLength(ja)); // TODO: std::array is not supported
+        from_jvalue(env, jv, t);
         return t;
     }
     template<typename T, typename... Args>

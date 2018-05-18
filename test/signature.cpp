@@ -2,8 +2,8 @@
 #include "jmi.h"
 #include <iostream>
 #include <type_traits>
+#include <array>
 #include <vector>
-
 using namespace std;
 using namespace jmi;
 
@@ -31,6 +31,7 @@ int main(int argc, char *argv[])
 {
     cout << "jmi test" << endl;
 
+    //cout << jmi::signature<decltype(&write)>::value << std::endl;
     cout << jmi::signature_of(write) << std::endl;
     cout << jmi::signature_of(1.2f) << endl;
     cout << jmi::signature_of(std::string()) << endl;

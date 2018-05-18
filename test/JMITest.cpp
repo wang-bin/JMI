@@ -58,18 +58,40 @@ void JMITestCached::getSStr(std::array<std::string,1>& v)
 	return callStatic<Get>(std::ref(v));
 }
 
-void JMITestCached::getIntArray(int v[2]) const
+std::vector<std::string> JMITestCached::getStrArray() const
+{
+	constexpr const char* MethodName = __FUNCTION__;
+	struct Get : MethodTag { static const char* name() {return MethodName;}};
+	return call<std::vector<std::string>, Get>();
+}
+
+std::vector<std::string> JMITestCached::getStrArrayS()
+{
+	constexpr const char* MethodName = __FUNCTION__;
+	struct Get : MethodTag { static const char* name() {return MethodName;}};
+	return callStatic<std::vector<std::string>, Get>();
+}
+
+std::valarray<int> JMITestCached::getIntArray() const
+{
+	constexpr const char* MethodName = __FUNCTION__;
+	struct Get : MethodTag { static const char* name() {return MethodName;}};
+	return call<std::valarray<int>, Get>();
+}
+
+void JMITestCached::getIntArrayAsParam(int v[2]) const
 {
 	// now v is int*
 	//int (&out)[2] = reinterpret_cast<int(&)[2]>(v);
 	int out[2];
-	struct Get : MethodTag { static const char* name() {return "getIntArray";}};
+	constexpr const char* MethodName = __FUNCTION__;
+	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	call<Get>(std::ref(out));
 	v[0] = out[0];
 	v[1] = out[1];
 }
 
-void JMITestCached::getIntArray(std::array<int, 2>& v) const
+void JMITestCached::getIntArrayAsParam(std::array<int, 2>& v) const
 {
 	constexpr const char* MethodName = __FUNCTION__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
@@ -121,18 +143,33 @@ std::string JMITestUncached::getStr() const
 	return obj.call<std::string>("getStr");
 }
 
-void JMITestUncached::getIntArray(int v[2]) const
+std::vector<std::string> JMITestUncached::getStrArrayS()
+{
+	return JObject<JMITestClassTag>::callStatic<std::vector<std::string>>(__FUNCTION__);
+}
+
+std::vector<std::string> JMITestUncached::getStrArray() const
+{
+	return obj.call<std::vector<std::string>>(__FUNCTION__);
+}
+
+std::vector<int> JMITestUncached::getIntArray() const
+{
+	return obj.call<std::vector<int>>(__FUNCTION__);
+}
+
+void JMITestUncached::getIntArrayAsParam(int v[2]) const
 {
 	// now v is int*
 	int out[2];
-	obj.call("getIntArray", std::ref(out));
+	obj.call(__FUNCTION__, std::ref(out));
 	v[0] = out[0];
 	v[1] = out[1];
 }
 
-void JMITestUncached::getIntArray(std::array<int, 2>& v) const
+void JMITestUncached::getIntArrayAsParam(std::array<int, 2>& v) const
 {
-	obj.call("getIntArray", std::ref(v));
+	obj.call(__FUNCTION__, std::ref(v));
 }
 
 extern "C" {
@@ -275,13 +312,22 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	jtc.setStr("why");
 	TEST(jtc.getStr() == "why");
 	int a0[2]{};
-	jtc.getIntArray(a0);
+	jtc.getIntArrayAsParam(a0);
 	TEST(a0[0] == 1);
 	TEST(a0[1] == 2017);
 	std::array<int, 2> a1;
-	jtc.getIntArray(a1);
+	jtc.getIntArrayAsParam(a1);
 	TEST(a1[0] == 1);
 	TEST(a1[1] == 2017);
+	std::valarray<int> av0 = jtc.getIntArray();
+	TEST(av0[0] == 1);
+	TEST(av0[1] == 2017);
+	auto sa = jtc.getStrArray();
+	TEST(sa[0] == jtc.getStr());
+	TEST(sa[1] == fsstr.get());
+	sa = jtc.getStrArrayS();
+	TEST(sa[0] == fsstr.get());
+
 	array<std::string,1> outs;
 	JMITestCached::getSStr(outs);
 	TEST(outs[0] == " output  String[]");
@@ -308,11 +354,19 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	TEST(jtuc.getX() == 2017);
 	jtuc.setStr("why");
 	TEST(jtuc.getStr() == "why");
-	jtuc.getIntArray(a0);
+	jtuc.getIntArrayAsParam(a0);
 	TEST(a0[0] == 1);
 	TEST(a0[1] == 2017);
-	jtuc.getIntArray(a1);
+	jtuc.getIntArrayAsParam(a1);
 	TEST(a1[0] == 1);
 	TEST(a1[1] == 2017);
+	std::vector<int> av1 = jtuc.getIntArray();
+	TEST(av1[0] == 1);
+	TEST(av1[1] == 2017);
+	sa = jtuc.getStrArray();
+	TEST(sa[0] == jtuc.getStr());
+	TEST(sa[1] == fsstr.get());
+	sa = jtuc.getStrArrayS();
+	TEST(sa[0] == fsstr.get());
 }
 } // extern "C"
