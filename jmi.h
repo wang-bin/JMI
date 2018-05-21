@@ -747,6 +747,8 @@ std::string signature_of(void (*)(Args...)) {
 
 template<class CTag>
 JObject<CTag>& JObject<CTag>::reset(jobject obj, JNIEnv *env) {
+    if (oid_ == obj)
+        return *this;
     error_.clear();
     if (!env) {
         env = getEnv();

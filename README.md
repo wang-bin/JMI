@@ -52,6 +52,14 @@ or
     texture.call("getTransformMatrix", std::ref(mat4)); // use std::ref() if parameter should be modified by jni method
 ```
 
+If out parameter is of type `JObject<...>` or it's subclass, `std::ref()` is not required because the object does not change, only some fields may be changed.
+
+```
+    MediaCodec::BufferInfo bi;
+    bi.create();
+    codec.dequeueOutputBuffer(bi, timeout);
+```
+
 - Call method with a return type:
 ```
     jlong t = texture.call<jlong>("getTimestamp");
