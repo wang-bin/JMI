@@ -38,12 +38,12 @@ struct FieldTag {}; // subclasses must define static const char* name();
 namespace detail {
 // using var template requires c++14
 template<class T>
-struct is_iobject : std::integral_constant<bool, std::is_base_of<typename std::remove_pointer<jobject>::type, typename std::remove_pointer<T>::type>::value> {};
+struct is_jobject : std::integral_constant<bool, std::is_base_of<typename std::remove_pointer<jobject>::type, typename std::remove_pointer<T>::type>::value> {};
 
 template<class T>
-using if_jobject = typename std::enable_if<is_iobject<T>::value, bool>::type;
+using if_jobject = typename std::enable_if<is_jobject<T>::value, bool>::type;
 template<class T>
-using if_not_jobject = typename std::enable_if<!is_iobject<T>::value, bool>::type;
+using if_not_jobject = typename std::enable_if<!is_jobject<T>::value, bool>::type;
 
 template<class Tag>
 using if_ClassTag = typename std::enable_if<std::is_base_of<ClassTag, Tag>::value, bool>::type;
@@ -172,7 +172,7 @@ public:
 
     // the following call()/callStatic() will always invoke GetMethodID()/GetStaticMethodID()
     template<typename T, typename... Args>
-    T call(const std::string& methodName, Args&&... args) const;
+    T call(const std::string& methodName, Args&&... args) const; // ambiguous methodName and arg?
     template<typename... Args>
     void call(const std::string& methodName, Args&&... args) const;
     template<typename T, typename... Args>
@@ -311,11 +311,13 @@ template <typename T, typename = void>
 struct is_string : std::false_type {};
 template <typename T>
 struct is_string<T, detail::void_t<decltype(std::declval<T>().substr())>> : std::true_type {};
+template <typename T>
+struct is_jarray_cpp : std::integral_constant<bool, is_array_like<T>::value && !is_string<T>::value> {};
 
 template<typename T>
-using if_jarray_cpp = typename std::enable_if<is_array_like<T>::value && !is_string<T>::value, bool>::type;
+using if_jarray_cpp = typename std::enable_if<is_jarray_cpp<T>::value, bool>::type;
 template<typename T>
-using if_not_jarray_cpp = typename std::enable_if<!is_array_like<T>::value || is_string<T>::value, bool>::type;
+using if_not_jarray_cpp = typename std::enable_if<!is_jarray_cpp<T>::value, bool>::type;
 
 // T* and T(&)[N] are treated as the same. use enable_if to select 1 of them. The function parameter is (const T&), so the default implementation of signature_of(const T&) must check is_pointer too.
 template<typename T> using if_pointer = typename std::enable_if<std::is_pointer<T>::value, bool>::type;
@@ -494,7 +496,7 @@ using namespace std;
     template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, array<T, N> &t) { from_jarray(env, v, t.data(), N); }
     //template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { from_jarray(env, v, t, N); }
 
-    template<typename T> struct has_local_ref { // is_jobject<T>?
+    template<typename T> struct has_local_ref { // is_jobject<T>? is_jarray_cpp?
         static const bool value = !is_arithmetic<T>::value && !is_pointer<T>::value && !is_JObject<T>::value;
     };
     template<typename T>
@@ -549,12 +551,15 @@ using namespace std;
     template<class T, if_JObject<T> = true>
     T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args) {
         T t;
-        t.reset(call_method<jobject>(env, oid, mid, args), env);
+        LocalRef r = call_method<jobject>(env, oid, mid, args);
+        t.reset(r, env);
         return t;
     }
     template<typename T, if_jarray_cpp<T> = true>
     T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args) {
         LocalRef ja = call_method<jobject>(env, oid, mid, args); // local ref will not be deleted in from_jvalue(), so manage here
+        if (!ja || env->ExceptionCheck())
+            return T();
         jvalue jv;
         jv.l = ja;
         T t(env->GetArrayLength(ja));
@@ -575,7 +580,8 @@ using namespace std;
     template<class T, if_JObject<T> = true>
     T call_static_method(JNIEnv *env, jclass cid, jmethodID mid, jvalue *args) {
         T t;
-        t.reset(call_static_method<jobject>(env, cid, mid, args), env);
+        LocalRef r = call_static_method<jobject>(env, cid, mid, args);
+        t.reset(r, env);
         return t;
     }
     template<class T, if_jarray_cpp<T> = true>
@@ -669,8 +675,11 @@ using namespace std;
     T get_field(JNIEnv* env, jobject oid, jfieldID fid);
     template<class T, if_JObject<T> = true>
     T get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+        LocalRef r = env->GetObjectField(oid, fid);
+        if (!r || env->ExceptionCheck())
+            return T();
         T t;
-        t.reset(env->GetObjectField(oid, fid), env);
+        t.reset(r, env);
         return t;
     }
     template<typename T>
@@ -710,8 +719,11 @@ using namespace std;
     T get_static_field(JNIEnv* env, jclass cid, jfieldID fid);
     template<class T, if_JObject<T> = true>
     T get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+        LocalRef r = env->GetObjectField(cid, fid);
+        if (!r || env->ExceptionCheck())
+            return T();
         T t;
-        t.reset(env->GetObjectField(cid, fid), env);
+        t.reset(r, env);
         return t;
     }
     template<typename T>
