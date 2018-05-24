@@ -3,6 +3,8 @@
 
 [English](README.md)
 
+[一些使用 JMI 写的 Java 类](https://github.com/wang-bin/AND.git)
+
 ### 特性
 
 - 支持 Java 方法输入、输出参数
@@ -117,7 +119,7 @@ Field 接口支持可缓存和无缓存 jfieldID
 
 ### 给 Java 类写个 C++ 类
 
-创建 JObject<YouClassTag> 或把其对象作为成员变量，或使用 CRTP JObject<YouClass>。 每个方法是想通常不超过3行代码，也可以使用一些宏使每个方法实现只需一行代码， 参见 [JMITest](test/JMITest.h)
+创建 JObject<YouClassTag> 或把其对象作为成员变量，或使用 CRTP JObject<YouClass>。 每个方法是想通常不超过3行代码，也可以使用一些宏使每个方法实现只需一行代码， 参见 [JMITest](test/JMITest.h) 及  [Project AND](https://github.com/wang-bin/AND.git)
 
 ### 使用编译器生成的签名
 
