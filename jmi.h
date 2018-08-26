@@ -6,6 +6,9 @@
  */
 // TODO: reset error before each call, reset exception after each call (Aspect pattern?)
 // TODO: query class path if return/parameter type is jobject
+// TODO: constexpr string literal: auto concat(type_to_literal<Args>()...).str
+// TODO: object convert
+// https://developer.android.com/training/articles/perf-jni#threads
 #pragma once
 #include <algorithm>
 #include <functional> // std::ref
@@ -543,6 +546,8 @@ using namespace std;
     T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args) {
         T t;
         LocalRef r = call_method<jobject>(env, oid, mid, args);
+        if (!r || env->ExceptionCheck())
+            return T();
         t.reset(r, env);
         return t;
     }
@@ -570,14 +575,18 @@ using namespace std;
     T call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args);
     template<class T, if_JObject<T> = true>
     T call_static_method(JNIEnv *env, jclass cid, jmethodID mid, jvalue *args) {
-        T t;
         LocalRef r = call_static_method<jobject>(env, cid, mid, args);
+        if (!r || env->ExceptionCheck())
+            return T();
+        T t;
         t.reset(r, env);
         return t;
     }
     template<class T, if_jarray_cpp<T> = true>
     T call_static_method(JNIEnv *env, jclass cid, jmethodID mid, jvalue *args) {
         LocalRef ja = call_static_method<jobject>(env, cid, mid, args); // local ref will not be deleted in from_jvalue(), so manage here
+        if (!ja || env->ExceptionCheck())
+            return T();
         jvalue jv;
         jv.l = ja;
         T t(env->GetArrayLength(ja)); // TODO: std::array is not supported
@@ -667,7 +676,7 @@ using namespace std;
     template<class T, if_JObject<T> = true>
     T get_field(JNIEnv* env, jobject oid, jfieldID fid) {
         LocalRef r = env->GetObjectField(oid, fid);
-        if (!r || env->ExceptionCheck())
+        if (!r)
             return T();
         T t;
         t.reset(r, env);
@@ -678,7 +687,7 @@ using namespace std;
         JNIEnv* env = getEnv();
         // TODO: call_on_exit?
         jfieldID fid = get_field_id<T>(env, cid, name, pfid);
-        if (!fid)
+        if (!fid) // no exception check, already exist in get()? what about call?
             return T();
         return get_field<T>(env, oid, fid);
     }
