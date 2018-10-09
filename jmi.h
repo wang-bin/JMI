@@ -294,23 +294,14 @@ template<typename E>
 struct signature<E, true> : signature<jint>{};
 
 namespace detail {
-#if (__GNUC__+0) < 5 && !defined __clang__
-// http://stackoverflow.com/a/28967049/1353549
-template <typename...> struct make_void { using type = void; };
-template <typename...Ts>
-using void_t = typename make_void<Ts...>::type;
-#else
-template <typename...> using void_t = void;
-#endif
-
 template <typename T, typename = void>
 struct is_array_like : std::false_type {};
 template <typename T>
-struct is_array_like<T, detail::void_t<decltype(std::declval<T>()[0]), decltype(std::declval<T>().size())>> : std::true_type {};
+struct is_array_like<T, decltype(void(std::declval<T>()[0]), void(std::declval<T>().size()))> : std::true_type {};
 template <typename T, typename = void>
 struct is_string : std::false_type {};
 template <typename T>
-struct is_string<T, detail::void_t<decltype(std::declval<T>().substr())>> : std::true_type {};
+struct is_string<T, decltype(void(std::declval<T>().substr()))> : std::true_type {};
 template <typename T>
 struct is_jarray_cpp : std::integral_constant<bool, is_array_like<T>::value && !is_string<T>::value> {};
 
