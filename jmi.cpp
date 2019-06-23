@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2018 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2019 Wang Bin - wbsecg1@gmail.com
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -379,8 +379,8 @@ template<> void from_jarray(JNIEnv* env, const jvalue& v, char* t, std::size_t N
 template<> void from_jarray(JNIEnv* env, const jvalue& v, std::string* t, std::size_t N)
 {
     for (size_t i = 0; i < N; ++i) {
-        LocalRef s = {env->GetObjectArrayElement(static_cast<jobjectArray>(v.l), i), env};
-        *(t + i) = to_string(s);
+        auto s = env->GetObjectArrayElement(static_cast<jobjectArray>(v.l), i);
+        *(t + i) = to_string((jstring)s); // local ref is deleted by to_string
     }
 }
 

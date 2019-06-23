@@ -25,6 +25,7 @@ namespace jmi {
 // set JavaVM to vm if not null. return previous JavaVM
 JavaVM* javaVM(JavaVM *vm = nullptr, jint version = JNI_VERSION_1_4);
 JNIEnv *getEnv();
+// to_string: local ref is deleted internally
 std::string to_string(jstring s, JNIEnv* env = nullptr);
 // You have to call DeleteLocalRef() manually for the returned jstring
 jstring from_string(const std::string& s, JNIEnv* env = nullptr);
