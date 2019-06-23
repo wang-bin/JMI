@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2018 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2019 Wang Bin - wbsecg1@gmail.com
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -671,7 +671,7 @@ using namespace std;
         }
         return fid;
     }
-    template<class T, if_not_JObject<T> = true>
+    template<class T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
     T get_field(JNIEnv* env, jobject oid, jfieldID fid);
     template<class T, if_JObject<T> = true>
     T get_field(JNIEnv* env, jobject oid, jfieldID fid) {
@@ -682,6 +682,18 @@ using namespace std;
         t.reset(r, env);
         return t;
     }
+    template<class T, if_jarray_cpp<T> = true>
+    T get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+        LocalRef ja = env->GetObjectField(oid, fid);
+        if (!ja || env->ExceptionCheck())
+            return T();
+        jvalue jv;
+        jv.l = ja;
+        T t(env->GetArrayLength(ja));
+        from_jvalue(env, jv, t);
+        return t;
+    }
+
     template<typename T>
     T get_field(jobject oid, jclass cid, jfieldID* pfid, const char* name) {
         JNIEnv* env = getEnv();
@@ -715,17 +727,29 @@ using namespace std;
         }
         return fid;
     }
-    template<typename T, if_not_JObject<T> = true>
+    template<typename T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
     T get_static_field(JNIEnv* env, jclass cid, jfieldID fid);
     template<class T, if_JObject<T> = true>
     T get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
-        LocalRef r = env->GetObjectField(cid, fid);
+        LocalRef r = env->GetStaticObjectField(cid, fid);
         if (!r || env->ExceptionCheck())
             return T();
         T t;
         t.reset(r, env);
         return t;
     }
+    template<class T, if_jarray_cpp<T> = true>
+    T get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+        LocalRef ja = env->GetStaticObjectField(cid, fid);
+        if (!ja || env->ExceptionCheck())
+            return T();
+        jvalue jv;
+        jv.l = ja;
+        T t(env->GetArrayLength(ja));
+        from_jvalue(env, jv, t);
+        return t;
+    }
+
     template<typename T>
     T get_static_field(jclass cid, jfieldID* pfid, const char* name) {
         JNIEnv* env = getEnv();
