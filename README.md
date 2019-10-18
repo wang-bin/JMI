@@ -162,7 +162,8 @@ g++ >= 4.9, clang >= 3.4.2
 
 ### TODO
 - modern C++ class generator script
+- no runtime string for signatures
 
 #### MIT License
->Copyright (c) 2016-2018 WangBin
+>Copyright (c) 2016-2019 WangBin
 
