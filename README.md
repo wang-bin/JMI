@@ -16,11 +16,12 @@
 - Supports JNI arithmetic types, JMI's JObject, C/C++ string and array of these types as method parameter type, return type and field type
 - Provide frequently used functions for convenience: `to_string(std::string)`, `from_string(jstring)`, `android::application()`
 - Easy to use. Minimize user code
+- Exception handling in every call
 
 ### Example:
 - Setup java vm in `JNI_OnLoad`: `jmi::javaVM(vm);`
 
-- Create a SurfaceTexture: 
+- Create a SurfaceTexture:
 ```
     // define SurfaceTexture tag class in any scope visibile by jmi::JObject<SurfaceTexture>
     struct SurfaceTexture : jmi::ClassTag { static std::string name() {return "android/graphics/SurfaceTexture";}};
@@ -165,5 +166,5 @@ g++ >= 4.9, clang >= 3.4.2
 - no runtime string for signatures
 
 #### MIT License
->Copyright (c) 2016-2019 WangBin
+>Copyright (c) 2016-2021 WangBin
 

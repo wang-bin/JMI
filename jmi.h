@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2019 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2021 Wang Bin - wbsecg1@gmail.com
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -8,6 +8,8 @@
 // TODO: query class path if return/parameter type is jobject
 // TODO: constexpr string literal: auto concat(type_to_literal<Args>()...).str
 // TODO: object convert
+// TODO: cppwinrt name<>
+// java template, e.g. Range<T>
 // https://developer.android.com/training/articles/perf-jni#threads
 #pragma once
 #include <algorithm>
@@ -341,7 +343,7 @@ inline std::string signature_of(const T&) {
     return s;
 }
 template<typename T, std::size_t N>
-inline std::string signature_of(const T(&)[N]) { 
+inline std::string signature_of(const T(&)[N]) {
     static const auto s = std::string({'['}).append({signature_of(T())});
     return s;
 }
@@ -397,17 +399,22 @@ using namespace std;
         return scope_exit_handler<F>(forward<F>(f));
     }
 
-
+#if !(__cpp_fold_expressions+0)
     static inline string make_sig() {return string();}
     template<typename Arg, typename... Args>
     string make_sig(Arg&& arg, Args&&... args) { // initializer_list + (a, b)
         //initializer_list({(s+=signature_of<Args>(args), 0)...});
         return signature_of(forward<Arg>(arg)).append(make_sig(forward<Args>(args)...));
     }
+#endif //!__cpp_fold_expressions
 
     template<typename... Args>
     string args_signature(Args&&... args) {
+#if (__cpp_fold_expressions+0)
+        static const string s("(" + (signature_of(forward<Args>(args)) + ... + string()) + ")");
+#else
         static const string s("(" + make_sig(forward<Args>(args)...) + ")");
+#endif
         return s;
     }
 
@@ -534,12 +541,19 @@ using namespace std;
         delete_array_local_ref(env, static_cast<jarray>(jargs->l), N, has_local_ref<T>::value);
     }
 
+#if (__cpp_fold_expressions+0)
+    template<typename... Args>
+    void ref_args_from_jvalues(JNIEnv* env, jvalue *jargs, Args&&... args) {
+        (set_ref_from_jvalue(env, jargs, std::forward<Args>(args)), ...);
+    }
+#else
     static inline void ref_args_from_jvalues(JNIEnv*, jvalue*) {}
     template<typename Arg, typename... Args>
     void ref_args_from_jvalues(JNIEnv* env, jvalue *jargs, Arg&& arg, Args&&... args) {
         set_ref_from_jvalue(env, jargs, std::forward<Arg>(arg));
         ref_args_from_jvalues(env, jargs + 1, forward<Args>(args)...);
     }
+#endif // (__cpp_fold_expressions+0)
 
     template<typename T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
     T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args);
