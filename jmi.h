@@ -541,19 +541,12 @@ using namespace std;
         delete_array_local_ref(env, static_cast<jarray>(jargs->l), N, has_local_ref<T>::value);
     }
 
-#if (__cpp_fold_expressions+0)
-    template<typename... Args>
-    void ref_args_from_jvalues(JNIEnv* env, jvalue *jargs, Args&&... args) {
-        (set_ref_from_jvalue(env, jargs, std::forward<Args>(args)), ...);
-    }
-#else
     static inline void ref_args_from_jvalues(JNIEnv*, jvalue*) {}
     template<typename Arg, typename... Args>
     void ref_args_from_jvalues(JNIEnv* env, jvalue *jargs, Arg&& arg, Args&&... args) {
         set_ref_from_jvalue(env, jargs, std::forward<Arg>(arg));
         ref_args_from_jvalues(env, jargs + 1, forward<Args>(args)...);
     }
-#endif // (__cpp_fold_expressions+0)
 
     template<typename T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
     T call_method(JNIEnv *env, jobject oid, jmethodID mid, jvalue *args);
