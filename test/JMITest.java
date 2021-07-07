@@ -4,7 +4,7 @@ public class JMITest {
     static {
         System.loadLibrary("JMITest");
     }
- 
+
     private native void nativeTest();
     public static void main(String[] args) {
         new JMITest().nativeTest();  // invoke the native method
@@ -19,6 +19,14 @@ public class JMITest {
     public static void getSStr(String[] s) {
         s[0] = " output  String[]";
     }
+    public static String getSub(int begin, int end, String s) {
+        return s.substring(begin, end);
+    }
+
+    public String sub(int begin, int end) {
+        return str.substring(begin, end);
+    }
+
     public String[] getStrArray() {
         String[] ss = new String[2];
         ss[0] = str;

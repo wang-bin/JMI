@@ -58,6 +58,18 @@ void JMITestCached::getSStr(std::array<std::string,1>& v)
 	return callStatic<Get>(std::ref(v));
 }
 
+std::string JMITestCached::getSub(jint beginIndex, jint endIndex, std::string s)
+{
+	struct Get : MethodTag { static const char* name() {return "getSub";}};
+	return callStatic<std::string, Get>(beginIndex, endIndex, s);
+}
+
+std::string JMITestCached::sub(jint beginIndex, jint endIndex) const
+{
+	struct Get : MethodTag { static const char* name() {return "sub";}};
+	return call<std::string, Get>(beginIndex, endIndex);
+}
+
 std::vector<std::string> JMITestCached::getStrArray() const
 {
 	constexpr const char* MethodName = __FUNCTION__;
@@ -136,6 +148,17 @@ int JMITestUncached::getY()
 void JMITestUncached::setStr(const string& v)
 {
 	obj.call("setStr", v);
+}
+
+
+std::string JMITestUncached::getSub(jint beginIndex, jint endIndex, std::string s)
+{
+	return JObject<JMITestClassTag>::callStatic<std::string>(__FUNCTION__, beginIndex, endIndex, s);
+}
+
+std::string JMITestUncached::sub(jint beginIndex, jint endIndex) const
+{
+	return obj.call<std::string>(__FUNCTION__, beginIndex, endIndex);
 }
 
 std::string JMITestUncached::getStr() const
@@ -225,7 +248,7 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	jbyte *ca = (jbyte*)"abcd";
     jstr.reset();
 	TEST(!jstr.create(ca));
-	
+
 	struct JMITest : public jmi::ClassTag { static std::string name() {return "JMITest";}};
 	jmi::JObject<JMITest> test;
 	struct Y : public jmi::FieldTag { static const char* name() { return "y";}};
@@ -327,6 +350,9 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	TEST(sa[1] == fsstr.get());
 	sa = jtc.getStrArrayS();
 	TEST(sa[0] == fsstr.get());
+	TEST(jtc.sub(0, 2) == "wh");
+	std::clog << "JMITestCached::getSub(0, 3): " << JMITestCached::getSub(0, 3, "1234") << endl;
+	TEST(JMITestCached::getSub(1, 3, "1234") == "23");
 
 	array<std::string,1> outs;
 	JMITestCached::getSStr(outs);
@@ -368,5 +394,7 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	TEST(sa[1] == fsstr.get());
 	sa = jtuc.getStrArrayS();
 	TEST(sa[0] == fsstr.get());
+	TEST(jtuc.sub(0, 2) == "wh");
+	TEST(JMITestUncached::getSub(1, 4, "1234") == "234");
 }
 } // extern "C"

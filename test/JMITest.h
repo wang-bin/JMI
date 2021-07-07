@@ -18,6 +18,8 @@ public:
     // java array is of fixed size
     static void getSStr(std::array<std::string,1>& v);
     static std::vector<std::string> getStrArrayS();
+    static std::string getSub(jint beginIndex, jint endIndex, std::string s);
+    std::string sub(jint beginIndex, jint endIndex) const;
     std::vector<std::string> getStrArray() const;
     std::valarray<int> getIntArray() const;
     void getIntArrayAsParam(int v[2]) const;
@@ -34,6 +36,10 @@ public:
     int getX() const;
     static void setY(int v);
     static int getY();
+
+    static std::string getSub(jint beginIndex, jint endIndex, std::string s);
+    std::string sub(jint beginIndex, jint endIndex) const;
+
     void setStr(const std::string& v);
     std::string getStr() const;
 
