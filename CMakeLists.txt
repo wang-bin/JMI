@@ -1,6 +1,6 @@
 project(jmi)
 cmake_minimum_required(VERSION 3.0)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -9,8 +9,6 @@ if(POLICY CMP0063) # visibility. since 3.3
 endif()
 set(CMAKE_CXX_VISIBILITY_PRESET hidden) #use with -fdata-sections -ffunction-sections to reduce target size
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(JAVA_AWT_LIBRARY NotNeeded)
 set(JAVA_JVM_LIBRARY NotNeeded)
@@ -29,6 +27,7 @@ else()
 endif()
 include_directories(${CMAKE_SOURCE_DIR})
 add_library(jmi STATIC jmi.cpp)
+
 add_executable(test_signature test/signature.cpp)
 target_link_libraries(test_signature PRIVATE jmi)
 add_library(JMITest SHARED test/JMITest.cpp)
