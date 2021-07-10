@@ -32,25 +32,25 @@ int main(int argc, char *argv[])
     cout << "jmi test" << endl;
 
     //cout << jmi::signature<decltype(&write)>::value << std::endl;
-    cout << jmi::signature_of(write) << std::endl;
-    cout << jmi::signature_of(1.2f) << endl;
-    cout << jmi::signature_of(std::string()) << endl;
+    cout << jmi::signature_of(write).data() << std::endl;
+    //cout << jmi::signature_of(1.2f) << endl;
+    cout << jmi::signature_of<std::string>().data() << endl;
     std::valarray<float> f;
-    cout << jmi::signature_of(&f) << endl;
-    cout << jmi::signature_of(f) << endl;
+    cout << jmi::signature_of<decltype(&f)>() << endl;
+    cout << jmi::signature_of<decltype(f)>().data() << endl;
     std::vector<std::string> s;
-    cout << jmi::signature_of(std::ref(s)) << endl;
+    cout << jmi::signature_of<decltype(std::ref(s))>().data() << endl;
     //std::vector<std::reference_wrapper<int>> v;
     //cout << jmi::signature_of(v);
     std::array<int, 4> a;
-    cout << jmi::signature_of(a) << endl;
+    cout << jmi::signature_of<decltype(a)>().data() << endl;
     float mat4[16];
-    cout << jmi::signature_of(mat4) << endl;
-    cout << "ref(mat4): " << jmi::signature_of(std::ref(mat4)) << endl;
+    cout << jmi::signature_of<decltype(mat4)>().data() << endl;
+    cout << "ref(mat4): " << jmi::signature_of<decltype(std::ref(mat4))>().data() << endl;
     //cout << "signature_of_args: " << jmi::signature_of_args<jint, jbyte, jlong>::value << endl;
     //std::unordered_map<float, string> m;
     //cout << jmi::signature_of(m);
-    cout << "test1: " << signature_of(test1) << endl;
-    cout << "test2: " << signature_of(test2) << endl;
-    cout << "test3: " << signature_of(test3) << endl;
+    cout << "test1: " << signature_of(test1).data() << endl;
+    cout << "test2: " << signature_of(test2).data() << endl;
+    cout << "test3: " << signature_of(test3).data() << endl;
 }

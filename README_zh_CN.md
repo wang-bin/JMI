@@ -7,6 +7,7 @@
 
 ### 特性
 
+- 编译期计算出签名常量(C++17)
 - 支持 Java 方法输入、输出参数
 - jclass、jmethodID、field 自动缓存
 - C++ 和 Java 方法属性一致，如静态方法对应 C++ 静态成员函数
@@ -20,7 +21,7 @@
 ### 例子:
 - `JNI_OnLoad` 中设置 java vm: `jmi::javaVM(vm);`
 
-- 创建 SurfaceTexture: 
+- 创建 SurfaceTexture:
 ```
     // 在任意 jmi::JObject<SurfaceTexture> 可见范围内定义 SurfaceTexture tag 类
     struct SurfaceTexture : jmi::ClassTag { static std::string name() {return "android/graphics/SurfaceTexture";}};
@@ -123,9 +124,8 @@ Field 接口支持可缓存和无缓存 jfieldID
 
 ### 使用编译器生成的签名
 
-模版 `string signature_of(T)` 返回类型 T 的签名. T 可以是 JMI 支持的类型(除了jobject，因为其类型是运行时确定的）、reference_wrapper、void 及由以上类型作为返回类型和参数类型的函数类型
+模版 `auto signature_of<T>()` 返回类型 T 的签名. T 可以是 JMI 支持的类型(除了jobject，因为其类型是运行时确定的）、reference_wrapper、void 及由以上类型作为返回类型和参数类型的函数类型
 
-`string signature_of(T)` 返回的 string 是静态存储的，使用 `signature_of(...).data()` 是安全的
 
 例子:
 
@@ -156,14 +156,16 @@ Field 接口支持可缓存和无缓存 jfieldID
 ### 为什么 JObject 是个模版?
 - 为了支持 jclass、jmethodID、jfieldID 缓存
 
-#### 已测编译器
+#### 编译器
+需要c++14/17
 
-g++ >= 4.9, clang >= 3.4.2
+- g++ >= 4.9.0(except 8.0~8.3)
+- clang >= 3.5
+- msvc>= 19.0
+- icc >= 17.0
 
 ### TODO
 - modern C++ 类自动生成脚本
-- 签名无需运行时string
 
 #### MIT License
->Copyright (c) 2016-2019 WangBin
-
+>Copyright (c) 2016-2021 WangBin

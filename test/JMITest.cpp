@@ -14,30 +14,30 @@
 using namespace std;
 using namespace jmi;
 
-void JMITestCached::setX(int v)
+void JMITestCached::setX(jint v)
 {
 	constexpr const char* MethodName = __FUNCTION__;
 	struct SetX : MethodTag { static const char* name() {return MethodName;}};
 	call<SetX>(v);
 }
 
-int JMITestCached::getX() const
+jint JMITestCached::getX() const
 {
 	constexpr const char* MethodName = __FUNCTION__;
 	struct GetX : MethodTag { static const char* name() {return MethodName;}};
-	return call<int, GetX>();
+	return call<jint, GetX>();
 }
 
-void JMITestCached::setY(int v)
+void JMITestCached::setY(jint v)
 {
 	struct Set : MethodTag { static const char* name() {return "setY";}};
 	callStatic<Set>(v);
 }
 
-int JMITestCached::getY()
+jint JMITestCached::getY()
 {
 	struct Get : MethodTag { static const char* name() {return "getY";}};
-	return callStatic<int, Get>();
+	return callStatic<jint, Get>();
 }
 
 void JMITestCached::setStr(const char* v)
@@ -84,18 +84,18 @@ std::vector<std::string> JMITestCached::getStrArrayS()
 	return callStatic<std::vector<std::string>, Get>();
 }
 
-std::valarray<int> JMITestCached::getIntArray() const
+std::valarray<jint> JMITestCached::getIntArray() const
 {
 	constexpr const char* MethodName = __FUNCTION__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
-	return call<std::valarray<int>, Get>();
+	return call<std::valarray<jint>, Get>();
 }
 
-void JMITestCached::getIntArrayAsParam(int v[2]) const
+void JMITestCached::getIntArrayAsParam(jint v[2]) const
 {
-	// now v is int*
-	//int (&out)[2] = reinterpret_cast<int(&)[2]>(v);
-	int out[2];
+	// now v is jint*
+	//jint (&out)[2] = reinterpret_cast<jint(&)[2]>(v);
+	jint out[2];
 	constexpr const char* MethodName = __FUNCTION__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	call<Get>(std::ref(out));
@@ -103,7 +103,7 @@ void JMITestCached::getIntArrayAsParam(int v[2]) const
 	v[1] = out[1];
 }
 
-void JMITestCached::getIntArrayAsParam(std::array<int, 2>& v) const
+void JMITestCached::getIntArrayAsParam(std::array<jint, 2>& v) const
 {
 	constexpr const char* MethodName = __FUNCTION__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
@@ -125,24 +125,24 @@ void JMITestCached::getSelfArray(array<JMITestCached,2> &v) const
 }
 
 
-void JMITestUncached::setX(int v)
+void JMITestUncached::setX(jint v)
 {
 	obj.call(__FUNCTION__, v);
 }
 
-int JMITestUncached::getX() const
+jint JMITestUncached::getX() const
 {
-	return obj.call<int>(__FUNCTION__);
+	return obj.call<jint>(__FUNCTION__);
 }
 
-void JMITestUncached::setY(int v)
+void JMITestUncached::setY(jint v)
 {
 	JObject<JMITestClassTag>::callStatic(__FUNCTION__, v);
 }
 
-int JMITestUncached::getY()
+jint JMITestUncached::getY()
 {
-	return JObject<JMITestClassTag>::callStatic<int>("getY");
+	return JObject<JMITestClassTag>::callStatic<jint>("getY");
 }
 
 void JMITestUncached::setStr(const string& v)
@@ -176,21 +176,21 @@ std::vector<std::string> JMITestUncached::getStrArray() const
 	return obj.call<std::vector<std::string>>(__FUNCTION__);
 }
 
-std::vector<int> JMITestUncached::getIntArray() const
+std::vector<jint> JMITestUncached::getIntArray() const
 {
-	return obj.call<std::vector<int>>(__FUNCTION__);
+	return obj.call<std::vector<jint>>(__FUNCTION__);
 }
 
-void JMITestUncached::getIntArrayAsParam(int v[2]) const
+void JMITestUncached::getIntArrayAsParam(jint v[2]) const
 {
-	// now v is int*
-	int out[2];
+	// now v is jint*
+	jint out[2];
 	obj.call(__FUNCTION__, std::ref(out));
 	v[0] = out[0];
 	v[1] = out[1];
 }
 
-void JMITestUncached::getIntArrayAsParam(std::array<int, 2>& v) const
+void JMITestUncached::getIntArrayAsParam(std::array<jint, 2>& v) const
 {
 	obj.call(__FUNCTION__, std::ref(v));
 }
@@ -213,8 +213,16 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
     cout << "JMI Test" << endl;
 	const jbyte cs[] = {'1', '2', '3'};
     std::array<jbyte, 3> cxxa{'a', 'b', 'c'};
+	//cout << zconcat('1', '2', '3').size() << endl;
+	//cout << zconcat('1', '2', '3').data() << endl << flush;
+	//cout << zconcat(zconcat('1', '2'), '3').size() << endl << flush;
+	//cout << ttt<decltype(cxxa)>().data() << endl << flush;
+	//static_assert(zconcat('1', '2') == array{'1', '2', '\0'});
+	//static_assert(zconcat(array{'1', '2', '\0'}, array{'3', '\0'}) == array{'1', '2', '3', '\0'});
+	//static_assert(zconcat(array{'1', '2', '\0'}, '3') == array{'1', '2', '3', '\0'});
+	//static_assert(jmi::signature_of<decltype(cxxa)>() == jmi::to_array("[B"));
 	struct JString : jmi::ClassTag {
-		static std::string name() { return jmi::signature_of(std::string());}
+		static constexpr auto name() { return jmi::signature<std::string>::value;};//jmi::signature_of<std::string>();}
 	};
 	jmi::JObject<JString> jstr0;
 	TEST(jstr0.create(cxxa));
@@ -222,6 +230,7 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	auto js2 = jstr;
 	TEST(jstr.call<jint>("length") == 3);
 	TEST(jstr.error().empty());
+	cout << jstr.signature().data() << endl;
 	TEST(jstr.signature() == "Ljava/lang/String;");
 	jstr.reset();
 	jstr.create("abcd");
@@ -243,13 +252,12 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	ic = jstr.call<jint,IndexOf>(std::string("c"), 1);
 	TEST(ic == 2);
 	TEST(jstr.error().empty());
-
     //jbyte ca[] = {'a', 'b', 'c', 'd'}; // why crash? why const crash?
 	jbyte *ca = (jbyte*)"abcd";
     jstr.reset();
 	TEST(!jstr.create(ca));
 
-	struct JMITest : public jmi::ClassTag { static std::string name() {return "JMITest";}};
+	struct JMITest : public jmi::ClassTag { static constexpr auto name() {return jmi::to_array("JMITest");} };
 	jmi::JObject<JMITest> test;
 	struct Y : public jmi::FieldTag { static const char* name() { return "y";}};
 	auto y = test.getStatic<Y, jint>();
@@ -338,6 +346,10 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	jtc.getIntArrayAsParam(a0);
 	TEST(a0[0] == 1);
 	TEST(a0[1] == 2017);
+	jtc.setX(2021);
+	jtc.getIntArrayAsParam(std::ref(a0));
+	TEST(a0[1] == 2021);
+	jtc.setX(2017);
 	std::array<int, 2> a1;
 	jtc.getIntArrayAsParam(a1);
 	TEST(a1[0] == 1);

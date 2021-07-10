@@ -4,15 +4,15 @@
 #include <valarray>
 #include <vector>
 
-struct JMITestClassTag : jmi::ClassTag { static std::string name() { return "JMITest";} };
+struct JMITestClassTag : jmi::ClassTag { static constexpr auto name() { return jmi::to_array("JMITest");} };
 class JMITestCached : public jmi::JObject<JMITestCached> // or jmi::JObject<JMITestClassTag>
 {
 public:
-    static std::string name() { return "JMITest";} // required if derive from JObject<JMITestCached>
-    void setX(int v);
-    int getX() const;
-    static void setY(int v);
-    static int getY();
+    static constexpr auto name() { return jmi::to_array("JMITest");} // required if derive from JObject<JMITestCached>
+    void setX(jint v);
+    jint getX() const;
+    static void setY(jint v);
+    static jint getY();
     void setStr(const char* v);
     std::string getStr() const;
     // java array is of fixed size
@@ -21,9 +21,9 @@ public:
     static std::string getSub(jint beginIndex, jint endIndex, std::string s);
     std::string sub(jint beginIndex, jint endIndex) const;
     std::vector<std::string> getStrArray() const;
-    std::valarray<int> getIntArray() const;
-    void getIntArrayAsParam(int v[2]) const;
-    void getIntArrayAsParam(std::array<int, 2>& v) const;
+    std::valarray<jint> getIntArray() const;
+    void getIntArrayAsParam(jint v[2]) const;
+    void getIntArrayAsParam(std::array<jint, 2>& v) const;
     JMITestCached getSelf() const;
     void getSelfArray(std::array<JMITestCached,2>& v) const;
 };
@@ -32,10 +32,10 @@ class JMITestUncached
 {
 public:
     bool create() { return obj.create(); } // DO NOT forget to call it
-    void setX(int v);
-    int getX() const;
-    static void setY(int v);
-    static int getY();
+    void setX(jint v);
+    jint getX() const;
+    static void setY(jint v);
+    static jint getY();
 
     static std::string getSub(jint beginIndex, jint endIndex, std::string s);
     std::string sub(jint beginIndex, jint endIndex) const;
@@ -45,9 +45,9 @@ public:
 
     static std::vector<std::string> getStrArrayS();
     std::vector<std::string> getStrArray() const;
-    std::vector<int> getIntArray() const;
-    void getIntArrayAsParam(int v[2]) const;
-    void getIntArrayAsParam(std::array<int, 2>& v) const;
+    std::vector<jint> getIntArray() const;
+    void getIntArrayAsParam(jint v[2]) const;
+    void getIntArrayAsParam(std::array<jint, 2>& v) const;
 private:
     jmi::JObject<JMITestClassTag> obj;
 };

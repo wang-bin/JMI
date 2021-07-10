@@ -1,0 +1,9 @@
+CMakeFiles
+CMakeCache.txt
+CTestCostData.txt
+CTestTestfile.cmake
+LastTest.log
+LastTestsFailed.log
+.ninja_log
+.ninja_deps
+build.ninja

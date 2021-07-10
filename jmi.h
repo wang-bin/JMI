@@ -4,20 +4,27 @@
  * https://github.com/wang-bin/JMI
  * MIT License
  */
+// requres: c++14. compile time signaure requires c++17
 // TODO: reset error before each call, reset exception after each call (Aspect pattern?)
 // TODO: query class path if return/parameter type is jobject
-// TODO: constexpr string literal: auto concat(type_to_literal<Args>()...).str
 // TODO: object convert
-// TODO: cppwinrt name<>
 // java template, e.g. Range<T>
 // https://developer.android.com/training/articles/perf-jni#threads
 #pragma once
 #include <algorithm>
+#include <array>
 #include <functional> // std::ref
 #include <string>
 #include <type_traits>
 #include <jni.h>
+#define JMI_USE_CXX17 1
+#if (__cplusplus + 0) >= 201707L || (_MSVC_LANG+0) > 201703L
+#define JMI_CXX20 1
+#endif
 #if (__cplusplus + 0) >= 201703L || (_MSVC_LANG+0) > 201402L
+#define JMI_CXX17 1
+#endif
+#if (JMI_CXX17 + 0)
 # include <string_view>
 #elif !defined(_LIBCPP_STRING_VIEW)
 using string_view = std::string;
@@ -43,7 +50,7 @@ namespace android {
 jobject application(JNIEnv* env = nullptr); // TODO: return LocalRef
 } // namespace android
 
-struct ClassTag {}; // used by JObject<Tag>. subclasses must define static string() name(), with or without "L ;" around
+struct ClassTag {}; // used by JObject<Tag>. subclasses must define static string/auto(array) name(), with or without "L ;" around
 struct MethodTag {}; // used by call() and callStatic(). subclasses must define static const char* name();
 struct FieldTag {}; // subclasses must define static const char* name();
 
@@ -72,9 +79,13 @@ using if_not_JObject = typename enable_if<!is_JObject<T>::value, bool>::type;
 //template<typename T> // jni primitive types(not all c++ arithmetic types?), jobject, jstring, ..., JObject, c++ array types
 //using if_jni_type = typename enable_if<is_arithmetic<T>::value || is_array_like<T>::value || is_same<T,jobject> || ... || is_JObject<T>::value
 template<typename T, bool = is_enum<T>::value> struct signature;
-// string signature_of(T) returns signature of object of type T, signature_of() returns signature of void type
+#if (JMI_CXX17+0)
+template<typename T>
+inline constexpr auto signature_v = signature<T, is_enum_v<T>>::value;
+#endif
+// auto signature_of<T>() returns signature of object of type T, return type is array<char,N> for c++17+, string for c++14, and char. signature_of() returns signature of void type
 // signature of function ptr
-template<typename R, typename... Args> string signature_of(R(*)(Args...));
+template<typename R, typename... Args> auto signature_of(R(*)(Args...));
 
 class LocalRef {
 public:
@@ -113,11 +124,13 @@ class JObject : public ClassTag
 {
 public:
     using Tag = CTag;
-    static const string className() {
-        static string s(normalizeClassName(CTag::name()));
-        return s;
-    }
-    static const string signature() {return "L" + className() + ";";}
+#if (JMI_CXX17+0) && (JMI_USE_CXX17+0)
+    static constexpr auto className(); // array<char, N> for c++17+, string for otherwise
+    static constexpr auto signature(); // array<char, N> for c++17+, string for otherwise
+#else
+    static string className();
+    static string signature();
+#endif
 
     // construct from an existing jobject. Usually obj is from native jni api containing a local ref, and it's local ref will be deleted if del_localref is true
     JObject(jobject obj = nullptr, bool del_localref = true) {
@@ -162,9 +175,7 @@ public:
     template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag> = true>
     inline T call(Args&&... args) const;
     template<class MTag, typename... Args,  detail::if_MethodTag<MTag> = true>
-    inline void call(Args&&... args) const {
-        call<void, MTag>(forward<Args>(args)...);
-    }
+    inline void call(Args&&... args) const;
     /* with MethodTag we can avoid calling GetStaticMethodID() in every callStatic()
         struct MyStaticMethod : jmi::MethodTag { static const char* name() { return "myStaticMethod";} };
         JObject<CT>::callStatic<R, MyStaticMethod>(args...);
@@ -172,9 +183,7 @@ public:
     template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag> = true>
     static T callStatic(Args&&... args);
     template<class MTag, typename... Args,  detail::if_MethodTag<MTag> = true>
-    static void callStatic(Args&&... args) {
-        callStatic<void, MTag>(forward<Args>(args)...);
-    }
+    static void callStatic(Args&&... args);
 
     // get/set field and static field
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
@@ -190,15 +199,11 @@ public:
     template<typename T, typename... Args>
     T call(const string_view& methodName, Args&&... args) const; // ambiguous methodName and arg?
     template<typename... Args>
-    void call(const string_view& methodName, Args&&... args) const {
-        call<void>(methodName, forward<Args>(args)...);
-    }
+    void call(const string_view& methodName, Args&&... args) const;
     template<typename T, typename... Args>
     static T callStatic(const string_view& name, Args&&... args);
     template<typename... Args>
-    static void callStatic(const string_view& name, Args&&... args) {
-        callStatic<void>(name, forward<Args>(args)...);
-    }
+    static void callStatic(const string_view& name, Args&&... args);
 
     template<typename T>
     T get(string_view&& fieldName) const;
@@ -269,51 +274,28 @@ private:
         error_ = move(s);
         return *const_cast<JObject*>(this);
     }
-    static string normalizeClassName(string name) {
-        string s = name;
-        if (s[0] == 'L' && s.back() == ';')
-            s = s.substr(1, s.size()-2);
-        replace(s.begin(), s.end(), '.', '/');
-        return s;
-    }
 
     jobject oid_ = nullptr;
     mutable string error_;
 };
 /*************************** JMI Public APIs End ***************************/
+} // namespace jmi
 
-/*************************** Below is JMI implementation and internal APIs***************************/
-//template<class CTag> inline string signature_of(const JObject<CTag>& t) { return t.signature();} // won't work if JObject subclass inherits JObject<...>
-template<class T, detail::if_JObject<T> = true>
-inline string signature_of(const T& t) { return t.signature();}
-// if T is jobject or LocalRef, signature can get from GetObjectClass=>getName, but can not be cached
 
-//signature_of_args<decltype(Args)...>::value, template<typename ...A> struct signature_of_args?
-template<> struct signature<bool> { static const char value = 'Z';}; // jboolean is uint8_t/uchar
-template<> struct signature<jboolean> { static const char value = 'Z';};
-template<> struct signature<jbyte> { static const char value = 'B';};
-template<> struct signature<jchar> { static const char value = 'C';};
-template<> struct signature<jshort> { static const char value = 'S';};
-template<> struct signature<jlong> { static const char value = 'J';};
-template<> struct signature<jint> { static const char value = 'I';};
-template<> struct signature<jfloat> { static const char value = 'F';};
-template<> struct signature<jdouble> { static const char value = 'D';};
-template<> struct signature<jbooleanArray> { constexpr static const char* value = "[Z";};
-template<> struct signature<jbyteArray> { constexpr static const char* value = "[B";};
-template<> struct signature<jcharArray> { constexpr static const char* value = "[C";};
-template<> struct signature<jshortArray> { constexpr static const char* value = "[S";};
-template<> struct signature<jintArray> { constexpr static const char* value = "[I";};
-template<> struct signature<jlongArray> { constexpr static const char* value = "[J";};
-template<> struct signature<jfloatArray> { constexpr static const char* value = "[F";};
-template<> struct signature<jdoubleArray> { constexpr static const char* value = "[D";};
-// "L...;" is used in method parameter
-template<> struct signature<string> { constexpr static const char* value = "Ljava/lang/String;";};
-template<> struct signature<char*> { constexpr static const char* value = "Ljava/lang/String;";};
-// TODO: function type
-template<typename E>
-struct signature<E, true> : signature<jint>{};
+namespace jmi {
+
+#if !(JMI_CXX20 + 0)
+template< class T >
+struct remove_cvref {
+    using type = typename remove_cv<typename std::remove_reference<T>::type>::type;
+};
+template< class T >
+using remove_cvref_t = typename remove_cvref<T>::type;
+#endif
 
 namespace detail {
+using namespace std;
+
 template <typename T, typename = void>
 struct is_array_like : false_type {};
 template <typename T>
@@ -323,7 +305,16 @@ struct is_string : false_type {};
 template <typename T>
 struct is_string<T, decltype(void(declval<T>().substr()))> : true_type {};
 template <typename T>
-struct is_jarray_cpp : integral_constant<bool, is_array_like<T>::value && !is_string<T>::value> {};
+struct is_jarray_cpp : integral_constant<bool, (is_array_like<T>::value || is_array<T>::value)
+    && !is_string<T>::value
+    && !is_same<typename decay<T>::type, char*>::value
+    && !is_same<typename decay<T>::type, const char*>::value> {};
+
+template<class T, typename = void>
+struct is_ref_wrap :false_type{};
+
+template<class T>
+struct is_ref_wrap<T, decltype(void(!declval<is_same<reference_wrapper<typename T::type>, remove_cvref_t<T>>>()))>: true_type{};
 
 template<typename T>
 using if_jarray_cpp = typename enable_if<is_jarray_cpp<T>::value, bool>::type;
@@ -340,52 +331,211 @@ template<class T>
 using if_jarray = typename enable_if<is_jarray<T>::value, bool>::type;
 template<class T>
 using if_not_jarray = typename enable_if<!is_jarray<T>::value, bool>::type;
-} // namespace detail
 
-template<typename T, detail::if_not_pointer<T> = true, detail::if_not_JObject<T> = true, detail::if_not_jarray_cpp<T> = true>
-inline string signature_of(const T&) {
-    return {signature<T>::value}; // initializer supports both char and char*
+template<class T>
+using if_ref_wrap = typename enable_if<is_ref_wrap<T>::value, bool>::type;
+template<class T>
+using if_not_ref_wrap = typename enable_if<!is_ref_wrap<T>::value, bool>::type;
+template<class T1, typename T2>
+using if_same = typename enable_if<is_same<T1, T2>::value, bool>::type;
+template<typename T>
+using if_cstring = enable_if_t<is_same<decay_t<T>, char*>::value || is_same<decay_t<T>, const char*>::value, bool>;
+template<typename T>
+using if_not_cstring = enable_if_t<!is_same<decay_t<T>, char*>::value && !is_same<decay_t<T>, const char*>::value, bool>;
+} // namespace detail
+inline namespace impl {
+    static inline string to_string(const string& s) noexcept { return s;}
+
+#if (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
+# define CONSTEXPR17 constexpr
+    template <size_t N, typename T, size_t... I>
+    constexpr auto to_array(T const* a, index_sequence<I...>) noexcept
+    {
+        return array{ a[I]... };
+    }
+
+    template <typename T, size_t N>
+    constexpr auto to_array(array<T, N> a) noexcept { return a; }
+
+    template <size_t N>
+    constexpr auto to_array(char const(&s)[N]) noexcept
+    {
+        return to_array<N>(s, make_index_sequence<N>());
+    }
+
+    template<typename T>
+    constexpr auto to_array(T c) noexcept { return array{c, T{}}; }
+
+    template <typename T, size_t N1, size_t N2, size_t... I1, size_t... I2>
+    constexpr auto concat(array<T, N1>  a1, array<T, N2> a2, index_sequence<I1...>, index_sequence<I2...>) noexcept
+    {
+        return array{ a1[I1]..., a2[I2]... };
+    }
+
+    template <typename T, size_t N1, size_t N2>
+    constexpr auto concat(array<T, N1> a1, array<T, N2> a2) noexcept
+    {
+        return concat(a1, a2, make_index_sequence<N1>(), make_index_sequence<N2>());
+    }
+// zconcat: assume input arrays are endwith T{}, remove the last T{} in a1, like c string concat
+    template <typename T, size_t N1, size_t N2>
+    constexpr auto zconcat(array<T, N1> a1, array<T, N2> a2) noexcept
+    {
+        return concat(a1, a2, make_index_sequence<N1-1>(), make_index_sequence<N2>());
+    }
+
+    template <typename T1, typename T2>
+    constexpr auto zconcat(T1&& t1, T2&& t2) noexcept
+    {
+        return zconcat(to_array(std::forward<T1>(t1)), to_array(std::forward<T2>(t2)));
+    }
+
+    template <typename T1, typename T2, typename... Rest>
+    constexpr auto zconcat(T1&& t1, T2&& t2, Rest&&... rest) noexcept
+    {
+        return zconcat(zconcat(std::forward<T1>(t1), std::forward<T2>(t2)), std::forward<Rest>(rest)...);
+    }
+
+    template<size_t N, size_t... I>
+    constexpr auto norm_impl(array<char, N> a, index_sequence<I...>) noexcept
+    {
+        return array{(a[I] == '.' ? '/' : a[I])...};
+    }
+
+    template<size_t N>
+    constexpr auto norm(array<char, N> a) noexcept
+    {
+        return norm_impl(a, make_index_sequence<N>{});
+    }
+
+    template<size_t N>
+    string to_string(array<char, N> const& a) noexcept
+    {
+        if (a[N])
+            return a.data();
+        return string(a.data(), N-1);
+    }
+
+    template<size_t N1, size_t N2>
+    inline constexpr bool operator==(const array<char, N1> a, const char (&s)[N2]) {
+        return N1 == N2 && equal(a.begin(), a.end(), begin(s));
+    }
+#else
+# define CONSTEXPR17 const
+    static inline string to_string(const char& s) noexcept { return {s};}
+    template<size_t N>
+    const string to_string(const char (&s)[N]) noexcept { return s;}
+
+    template<size_t N>
+    constexpr const char* to_array(const char (&s)[N]) noexcept { return s;}
+    static inline auto to_array(const string& s) noexcept { return s;}
+    static inline string to_array(const char& s) noexcept { return {s};}
+
+    template <typename T1>
+    auto zconcat(T1 const& t1) noexcept { return to_string(t1);}
+    template <typename T1, typename... Rest>
+    auto zconcat(T1 const& t1, Rest const&... rest) noexcept
+    {
+        return to_string(t1).append(zconcat(rest...));
+    }
+
+    static inline auto norm(string s) noexcept
+    {
+        if (s[0] == 'L' && s.back() == ';')
+            s = s.substr(1, s.size()-2);
+        replace(s.begin(), s.end(), '.', '/');
+        return s;
+    }
+#endif
+} // namespace impl
+
+/*************************** Below is JMI implementation and internal APIs***************************/
+
+//signature_of_args<decltype(Args)...>::value, template<typename ...A> struct signature_of_args?
+template<> struct signature<bool> { static constexpr char value = 'Z';}; // jboolean is uint8_t/uchar
+template<> struct signature<jboolean> { static constexpr char value = 'Z';};
+template<> struct signature<jbyte> { static constexpr char value = 'B';};
+template<> struct signature<jchar> { static constexpr char value = 'C';};
+template<> struct signature<jshort> { static constexpr char value = 'S';};
+template<> struct signature<jlong> { static constexpr char value = 'J';};
+template<> struct signature<jint> { static constexpr char value = 'I';};
+template<> struct signature<jfloat> { static constexpr char value = 'F';};
+template<> struct signature<jdouble> { static constexpr char value = 'D';};
+template<> struct signature<jbooleanArray> { static constexpr auto value = to_array("[Z");};
+template<> struct signature<jbyteArray> { static constexpr auto value = to_array("[B");};
+template<> struct signature<jcharArray> { static constexpr auto value = to_array("[C");};
+template<> struct signature<jshortArray> { static constexpr auto value = to_array("[S");};
+template<> struct signature<jintArray> { static constexpr auto value = to_array("[I");};
+template<> struct signature<jlongArray> { static constexpr auto value = to_array("[J");};
+template<> struct signature<jfloatArray> { static constexpr auto value = to_array("[F");};
+template<> struct signature<jdoubleArray> { static constexpr auto value = to_array("[D");};
+// "L...;" is used in method parameter
+template<> struct signature<string> { static constexpr auto value = to_array("Ljava/lang/String;");};
+template<> struct signature<char*> { static constexpr auto value = to_array("Ljava/lang/String;");};
+
+template<typename E>
+struct signature<E, true> : signature<jint>{};
+
+template<typename T, detail::if_not_pointer<T> = true, detail::if_not_JObject<T> = true, detail::if_not_jarray_cpp<T> = true
+    , detail::if_not_ref_wrap<T> = true, detail::if_not_cstring<T> = true>
+CONSTEXPR17 auto signature_of() {
+    return to_array(signature<remove_cvref_t<decay_t<T>>>::value); // initializer supports both char and char*
 }
-inline string signature_of(const char*) { return "Ljava/lang/String;";}
-inline string signature_of(char*) { return "Ljava/lang/String;";}
-inline string signature_of() { return {'V'};}
-// for base types, {'[', signature<T>::value};
+
+//template<class CTag> inline string signature_of(const JObject<CTag>& t) { return t.signature();} // won't work if JObject subclass inherits JObject<...>
+// TODO: use c++20 requires
+template<class T, detail::if_JObject<T> = true>
+CONSTEXPR17 auto signature_of() { return T::signature();}
+// if T is jobject or LocalRef, signature can get from GetObjectClass=>getName, but can not be cached
+constexpr auto signature_of() { return 'V';}
 
 template<typename T, detail::if_jarray_cpp<T> = true>
-inline string signature_of(const T&) {
-    static const auto s = string({'['}).append({signature_of(typename T::value_type())});
-    return s;
-}
-template<typename T, size_t N>
-inline string signature_of(const T(&)[N]) {
-    static const auto s = string({'['}).append({signature_of(T())});
-    return s;
+CONSTEXPR17 auto signature_of() {
+    return zconcat('[', signature_of<remove_cvref_t<decltype(T{}[0])>>()); // both c array and cpp containers
 }
 
-template<typename T, detail::if_pointer<T> = true, detail::if_not_jarray<T> = true>
-inline string signature_of(const T&) { return {signature<jlong>::value};}
+template<typename T, detail::if_cstring<T> = true>
+constexpr auto signature_of() { return signature<char*>::value;}
+
+template<typename T, detail::if_pointer<T> = true, detail::if_not_jarray<T> = true, detail::if_not_cstring<T> = true>
+constexpr auto signature_of() { return signature<jlong>::value;}
+
 template<typename T, detail::if_pointer<T> = true, detail::if_jarray<T> = true>
-inline string signature_of(const T&) { return {signature<T>::value};}
+constexpr auto signature_of() { return signature<T>::value;}
 
 // NOTE: define reference_wrapper at last. assume we only use reference_wrapper<...>, no container<reference_wrapper<...>>
-template<typename T>
-inline string signature_of(const reference_wrapper<T>&) {
-    static const string s = signature_of(T()); //TODO: no construct
-    return s;
+template<typename T, detail::if_ref_wrap<T> = true, detail::if_not_jarray_cpp<typename T::type> = true>
+CONSTEXPR17 auto signature_of() {
+    return signature_of<typename T::type>();
 }
-template<typename T, size_t N>
-inline string signature_of(const reference_wrapper<T[N]>&) {
-    static const string s = string({'['}).append({signature_of(T())});
-    //return signature_of<T,N>((T[N]){}); //aggregated initialize
-    return s;
+template<typename T, detail::if_ref_wrap<T> = true, detail::if_jarray_cpp<typename T::type> = true>
+CONSTEXPR17 auto signature_of() {
+    using E = typename T::type;
+    return zconcat('[', signature_of<remove_cvref_t<decltype(E{}[0])>>());
 }
-// signature_of_no_ptr: consistent for any type, including void. so for call<T,MT>(...) T can be void.
-template<class T>
-string signature_of_no_ptr(T*) { return signature_of(T());}
-inline string signature_of_no_ptr(void*) { return signature_of();}
+// signature_of_no_ptr: consistent for any type, including void. so for call<T,MT>(...) T can be void. TODO: remove
+template<typename T, typename enable_if<is_pointer<T>::value && !is_same<T, void*>::value, bool>::type = true>
+CONSTEXPR17 auto signature_of_no_ptr() { return signature_of<typename remove_pointer<T>::type>();}
+template<typename T, typename enable_if<is_same<T, void*>::value, bool>::type = true>
+constexpr auto signature_of_no_ptr() { return signature_of();}
 
 namespace detail {
-using namespace std;
+    template<typename... Args>
+    CONSTEXPR17 auto args_signature() {
+        return zconcat('(', signature_of<remove_cvref_t<Args>>()..., ')');
+    }
+
+    static inline CONSTEXPR17 auto args_signature() { return zconcat('(', signature_of(), ')');}
+} //namespace detail
+
+
+template<typename R, typename... Args>
+auto signature_of(R (*)(Args...)) {
+    static CONSTEXPR17 auto s = zconcat(detail::args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<R>::type>());;
+    return s;
+}
+
+namespace detail {
     bool handle_exception(JNIEnv* env = nullptr);
 
     template<class F>
@@ -411,25 +561,6 @@ using namespace std;
     template<class F>
     scope_exit_handler<F> call_on_exit(F&& f) noexcept {
         return scope_exit_handler<F>(forward<F>(f));
-    }
-
-#if !(__cpp_fold_expressions+0)
-    static inline string make_sig() {return string();}
-    template<typename Arg, typename... Args>
-    string make_sig(Arg&& arg, Args&&... args) { // initializer_list + (a, b)
-        //initializer_list({(s+=signature_of<Args>(args), 0)...});
-        return signature_of(forward<Arg>(arg)).append(make_sig(forward<Args>(args)...));
-    }
-#endif //!__cpp_fold_expressions
-
-    template<typename... Args>
-    string args_signature(Args&&... args) {
-#if (__cpp_fold_expressions+0)
-        static const string s("(" + (signature_of(forward<Args>(args)) + ... + string()) + ")");
-#else
-        static const string s("(" + make_sig(forward<Args>(args)...) + ")");
-#endif
-        return s;
     }
 
     template<typename T, if_not_JObject<T> = true>
@@ -682,17 +813,8 @@ using namespace std;
 
 
     template<typename T>
-    jfieldID get_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid = nullptr) {
-        jfieldID fid = nullptr;
-        if (pfid)
-            fid = *pfid;
-        if (!fid) {
-            fid = env->GetFieldID(cid, name, signature_of(T()).data());
-            if (pfid)
-                *pfid = fid;
-        }
-        return fid;
-    }
+    jfieldID get_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid = nullptr);
+
     template<class T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
     T get_field(JNIEnv* env, jobject oid, jfieldID fid);
     template<class T, if_JObject<T> = true>
@@ -738,17 +860,7 @@ using namespace std;
     }
 
     template<typename T>
-    jfieldID get_static_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid = nullptr) {
-        jfieldID fid = nullptr;
-        if (pfid)
-            fid = *pfid;
-        if (!fid) {
-            fid = env->GetStaticFieldID(cid, name, signature_of(T()).data());
-            if (pfid)
-                *pfid = fid;
-        }
-        return fid;
-    }
+    jfieldID get_static_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid = nullptr);
     template<typename T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
     T get_static_field(JNIEnv* env, jclass cid, jfieldID fid);
     template<class T, if_JObject<T> = true>
@@ -790,18 +902,63 @@ using namespace std;
             return;
         set_static_field<T>(env, cid, fid, forward<T>(v));
     }
+
+    template<typename T>
+    jfieldID get_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid) {
+        jfieldID fid = nullptr;
+        if (pfid)
+            fid = *pfid;
+        if (!fid) {
+            fid = env->GetFieldID(cid, name, signature_of<T>().data());
+            if (pfid)
+                *pfid = fid;
+        }
+        return fid;
+    }
+    template<typename T>
+    jfieldID get_static_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid) {
+        jfieldID fid = nullptr;
+        if (pfid)
+            fid = *pfid;
+        if (!fid) {
+            fid = env->GetStaticFieldID(cid, name, signature_of<T>().data());
+            if (pfid)
+                *pfid = fid;
+        }
+        return fid;
+    }
 } // namespace detail
 
-template<typename R, typename... Args>
-string signature_of(R (*)(Args...)) {
-    static const auto s(detail::args_signature(forward<Args>(Args())...).append(signature_of(R())));
+#if (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
+template<class CTag>
+constexpr auto JObject<CTag>::className()
+{
+    return impl::norm(CTag::name());
+}
+
+template<class CTag>
+constexpr auto JObject<CTag>::signature()
+{
+    if constexpr (className()[0]== 'L')
+        return className();
+    else
+        return zconcat("L", className(), ";");
+}
+#else
+template<class CTag>
+string JObject<CTag>::className()
+{
+    static string s = impl::norm(CTag::name()); // TODO: remove L ;?
     return s;
 }
-template<typename... Args>
-string signature_of(void (*)(Args...)) {
-    static const auto s(detail::args_signature(forward<Args>(Args())...).append(signature_of()));
-    return s;
+
+template<class CTag>
+string JObject<CTag>::signature()
+{
+    return "L" + className() + ";";
 }
+#endif // (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
+
 
 template<class CTag>
 JObject<CTag>& JObject<CTag>::reset(jobject obj, JNIEnv *env) {
@@ -832,25 +989,25 @@ bool JObject<CTag>::create(Args&&... args) {
     if (!env) {
         env = getEnv();
         if (!env) {
-            setError("No JNIEnv when creating class '" + className() + "'");
+            setError("No JNIEnv when creating class '" + to_string(className()) + "'");
             return false;
         }
     }
     const jclass cid = classId();
     if (!cid) {
-        setError("Failed to find class '" + className() + "'");
+        setError("Failed to find class '" + to_string(className()) + "'");
         return false;
     }
     auto checker = call_on_exit([=]{ handle_exception(env); });
-    static const auto s(args_signature(forward<Args>(args)...).append(signature_of())); // void
+    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of()); // void
     static const jmethodID mid = env->GetMethodID(cid, "<init>", s.data()); // can be static because class id, signature and arguments combination is unique
     if (!mid) {
-        setError(string("Failed to find constructor of '" + className() + "' with signature '" + s + "'."));
+        setError(string("Failed to find constructor of '") + className().data() + "' with signature '" + s.data() + "'.");
         return false;
     }
     LocalRef oid = env->NewObjectA(cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin())); // ptr0(jv) crash
     if (!oid) {
-        setError(string("Failed to call constructor '" + className() + "' with signature '" + s + "'."));
+        setError(string("Failed to call constructor '") + className().data() + "' with signature '" + s.data() + "'.");
         return false;
     }
     reset(oid, env);
@@ -861,18 +1018,33 @@ template<class CTag>
 template<typename T, class MTag, typename... Args, detail::if_MethodTag<MTag>>
 T JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
-    static const auto s = args_signature(forward<Args>(args)...).append(signature_of_no_ptr(typename add_pointer<T>::type()));
+    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
     static jmethodID mid = nullptr;
     return call_with_methodID<T>(oid_, classId(), &mid, [this](string&& err){ setError(move(err));}, s.data(), MTag::name(), forward<Args>(args)...);
 }
-
+template<class CTag>
+template<class MTag, typename... Args, detail::if_MethodTag<MTag>>
+void JObject<CTag>::call(Args&&... args) const {
+    using namespace detail;
+    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
+    static jmethodID mid = nullptr;
+    call_with_methodID<void>(oid_, classId(), &mid, [this](string&& err){ setError(move(err));}, s.data(), MTag::name(), forward<Args>(args)...);
+}
 template<class CTag>
 template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
 T JObject<CTag>::callStatic(Args&&... args) {
     using namespace detail;
-    static const auto s = args_signature(forward<Args>(args)...).append(signature_of_no_ptr(typename add_pointer<T>::type()));
+    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
     static jmethodID mid = nullptr;
     return call_static_with_methodID<T>(classId(), &mid, nullptr, s.data(), MTag::name(), forward<Args>(args)...);
+}
+template<class CTag>
+template<class MTag, typename... Args,  detail::if_MethodTag<MTag>>
+void JObject<CTag>::callStatic(Args&&... args) {
+    using namespace detail;
+    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
+    static jmethodID mid = nullptr;
+    return call_static_with_methodID<void>(classId(), &mid, nullptr, s.data(), MTag::name(), forward<Args>(args)...);
 }
 
 template<class CTag>
@@ -881,7 +1053,7 @@ T JObject<CTag>::get() const {
     static jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([=]{
         if (detail::handle_exception()) // TODO: check fid
-            setError(string("Failed to get field '") + FTag::name() + "' with signature '" + signature_of(T()) + "'.");
+            setError(string("Failed to get field '") + FTag::name() + "' with signature '" + signature_of<T>().data() + "'.");
     });
     return detail::get_field<T>(oid_, classId(), &fid, FTag::name());
 }
@@ -891,7 +1063,7 @@ bool JObject<CTag>::set(T&& v) {
     static jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([=]{
         if (detail::handle_exception())
-            setError(string("Failed to set field '") + FTag::name() + "' with signature '" + signature_of(T()) + "'.");
+            setError(string("Failed to set field '") + FTag::name() + "' with signature '" + signature_of<T>().data() + "'.");
     });
     detail::set_field<T>(oid_, classId(), &fid, FTag::name(), forward<T>(v));
     return true;
@@ -910,20 +1082,34 @@ bool JObject<CTag>::setStatic(T&& v) {
     return true;
 }
 
+
 template<class CTag>
 template<typename T, typename... Args>
 T JObject<CTag>::call(const string_view &methodName, Args&&... args) const {
     using namespace detail;
-    static const auto s = args_signature(forward<Args>(args)...).append(signature_of_no_ptr(typename add_pointer<T>::type()));
+    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
     return call_with_methodID<T>(oid_, classId(), nullptr, [this](string&& err){ setError(move(err));}, s.data(), methodName.data(), forward<Args>(args)...);
 }
-
+template<class CTag>
+template<typename... Args>
+void JObject<CTag>::call(const string_view &methodName, Args&&... args) const {
+    using namespace detail;
+    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
+    call_with_methodID<void>(oid_, classId(), nullptr, [this](string&& err){ setError(move(err));}, s.data(), methodName.data(), forward<Args>(args)...);
+}
 template<class CTag>
 template<typename T, typename... Args>
 T JObject<CTag>::callStatic(const string_view &name, Args&&... args) {
     using namespace detail;
-    static const auto s = args_signature(forward<Args>(args)...).append(signature_of_no_ptr(typename add_pointer<T>::type()));
+    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
     return call_static_with_methodID<T>(classId(), nullptr, nullptr, s.data(), name.data(), forward<Args>(args)...);
+}
+template<class CTag>
+template<typename... Args>
+void JObject<CTag>::callStatic(const string_view &name, Args&&... args) {
+    using namespace detail;
+    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
+    call_static_with_methodID<void>(classId(), nullptr, nullptr, s.data(), name.data(), forward<Args>(args)...);
 }
 
 template<class CTag>
@@ -932,7 +1118,7 @@ T JObject<CTag>::get(string_view&& fieldName) const {
     jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([=]{
         if (detail::handle_exception()) // TODO: check fid
-            setError(string("Failed to get field '") + fieldName.data() + "' with signature '" + signature_of(T()) + "'.");
+            setError(string("Failed to get field '") + fieldName.data() + "' with signature '" + signature_of<T>().data() + "'.");
     });
     return detail::get_field<T>(oid_, classId(), &fid, fieldName.data());
 }
@@ -942,7 +1128,7 @@ bool JObject<CTag>::set(string_view&& fieldName, T&& v) {
     jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([=]{
         if (detail::handle_exception())
-            setError(string("Failed to set field '") + fieldName.data() + "' with signature '" + signature_of(T()) + "'.");
+            setError(string("Failed to set field '") + fieldName.data() + "' with signature '" + signature_of<T>().data() + "'.");
     });
     detail::set_field<T>(oid_, classId(), &fid, fieldName.data(), forward<T>(v));
     return true;
@@ -1039,32 +1225,31 @@ jclass JObject<CTag>::classId(JNIEnv* env) {
 }
 
 namespace detail {
-
-template<typename T>
-jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref) {
-    if (!env) {
-        env = getEnv();
-        if (!env)
-            return nullptr;
-    }
-    jarray arr = nullptr;
-    if (N == 0)
-        arr = make_jarray(env, T(), 0);
-    else
-        arr = make_jarray(env, c0, N);
-    if (!is_ref) {
-        if (is_arithmetic<T>::value) {
-            set_jarray(env, arr, 0, N, c0);
-        } else { // string etc. must convert to jobject
-            for (size_t i = 0; i < N; ++i)
-                set_jarray(env, arr, i, 1, *((&c0)+i));
+    template<typename T>
+    jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref) {
+        if (!env) {
+            env = getEnv();
+            if (!env)
+                return nullptr;
         }
+        jarray arr = nullptr;
+        if (N == 0)
+            arr = make_jarray(env, T(), 0);
+        else
+            arr = make_jarray(env, c0, N);
+        if (!is_ref) {
+            if (is_arithmetic<T>::value) {
+                set_jarray(env, arr, 0, N, c0);
+            } else { // string etc. must convert to jobject
+                for (size_t i = 0; i < N; ++i)
+                    set_jarray(env, arr, i, 1, *((&c0)+i));
+            }
+        }
+        return arr;
     }
-    return arr;
-}
-template<class CTag>
-jvalue to_jvalue(const JObject<CTag> &obj, JNIEnv* env) {
-    return to_jvalue(jobject(obj), env);
-}
-} //namespace detail
+    template<class CTag>
+    jvalue to_jvalue(const JObject<CTag> &obj, JNIEnv* env) {
+        return to_jvalue(jobject(obj), env);
+    }
+} // namespace detail
 } //namespace jmi
