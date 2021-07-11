@@ -27,6 +27,7 @@ else()
 endif()
 include_directories(${CMAKE_SOURCE_DIR})
 add_library(jmi STATIC jmi.cpp)
+target_link_libraries(jmi PUBLIC pthread) # linux
 
 add_executable(test_signature test/signature.cpp)
 target_link_libraries(test_signature PRIVATE jmi)
@@ -38,7 +39,8 @@ get_target_property(class_dir test_jmi CLASSDIR)
 message(STATUS "Jar file: ${jar_path}")
 message(STATUS "Class compiled to: ${class_dir}")
 #add_test(NAME signature_test COMMAND )
-add_test(NAME jmitest COMMAND ${Java_JAVA_EXECUTABLE} -cp ${jar_path} JMITest)
+# -Djava.library.path=. required on linux if libJMITest.so can not be found in LD_LIBRARY_PATH
+add_test(NAME jmitest COMMAND ${Java_JAVA_EXECUTABLE} -cp ${jar_path} -Djava.library.path=. JMITest)
 if(ANDROID)
   target_link_libraries(test_signature PRIVATE -landroid -llog)
   target_link_libraries(JMITest PRIVATE -landroid -llog)

@@ -1,0 +1,68 @@
+name: Build
+on:
+  push:
+
+# JAVA_HOME_13_X64 for win, JAVA_HOME_11_X64 otherwise
+
+jobs:
+  AppleClang:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dev tools
+      run: |
+        brew install openjdk
+        brew info openjdk
+    - name: Build
+      #env:
+      #  JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
+      run: |
+        export JAVA_HOME=/usr/local/opt/openjdk
+        cmake .
+        cmake --build .
+    - name: Test
+      #env:
+      #  JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
+      run: |
+        export JAVA_HOME=/usr/local/opt/openjdk
+        ctest
+
+  GCC:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc_ver: [9, 10, 11]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dev tools
+      run: |
+        brew install openjdk
+        brew info openjdk
+    - name: Build
+      run: |
+        export JAVA_HOME=/usr/local/opt/openjdk
+        cmake -DCMAKE_C_COMPILER=gcc-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.cc_ver }} .
+        cmake --build .
+    - name: Test
+      run: |
+        export JAVA_HOME=/usr/local/opt/openjdk
+        ctest
+
+  Clang:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc_ver: [10, 11, 12]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dev tools
+      run: sudo apt install openjdk-11-jdk-headless
+    - name: Build
+      run: |
+        export CPATH=/usr/lib/jvm/adoptopenjdk-11-hotspot-amd64/include/linux # jni_md.h
+        cmake -DCMAKE_C_COMPILER=clang-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=clang++-${{ matrix.cc_ver }} .
+        cmake --build .
+    - name: Test
+      run: ctest
