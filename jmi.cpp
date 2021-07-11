@@ -242,14 +242,15 @@ std::string call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, 
     return to_string(static_cast<jstring>(call_static_method<jobject>(env, classId, methodId, args)), env);
 }
 
-template<> jvalue to_jvalue(const jboolean &obj, JNIEnv* env) { return jvalue{.z = obj};}
-template<> jvalue to_jvalue(const jbyte &obj, JNIEnv* env) { return jvalue{.b = obj};}
-template<> jvalue to_jvalue(const jchar &obj, JNIEnv* env) { return jvalue{.c = obj};}
-template<> jvalue to_jvalue(const jshort &obj, JNIEnv* env) { return jvalue{.s = obj};}
-template<> jvalue to_jvalue(const jint &obj, JNIEnv* env) { return jvalue{.i = obj};}
-template<> jvalue to_jvalue(const jlong &obj, JNIEnv* env) { return jvalue{.j = obj};}
-template<> jvalue to_jvalue(const jfloat &obj, JNIEnv* env) { return jvalue{.f = obj};}
-template<> jvalue to_jvalue(const jdouble &obj, JNIEnv* env) { return jvalue{.d = obj};}
+// designated initializer jvalue{.b = obj} requires c++20 or gnu
+template<> jvalue to_jvalue(const jboolean &obj, JNIEnv* env) { jvalue v; v.z = obj; return v;} //{ return jvalue{.z = obj};}
+template<> jvalue to_jvalue(const jbyte &obj, JNIEnv* env) { jvalue v; v.b = obj; return v;} //{ return jvalue{.b = obj};}
+template<> jvalue to_jvalue(const jchar &obj, JNIEnv* env) { jvalue v; v.c = obj; return v;} //{ return jvalue{.c = obj};}
+template<> jvalue to_jvalue(const jshort &obj, JNIEnv* env) { jvalue v; v.s = obj; return v;} //{ return jvalue{.s = obj};}
+template<> jvalue to_jvalue(const jint &obj, JNIEnv* env) { jvalue v; v.i = obj; return v;} //{ return jvalue{.i = obj};}
+template<> jvalue to_jvalue(const jlong &obj, JNIEnv* env) { jvalue v; v.j = obj; return v;} //{ return jvalue{.j = obj};}
+template<> jvalue to_jvalue(const jfloat &obj, JNIEnv* env) { jvalue v; v.f = obj; return v;} //{ return jvalue{.f = obj};}
+template<> jvalue to_jvalue(const jdouble &obj, JNIEnv* env) { jvalue v; v.d = obj; return v;} //{ return jvalue{.d = obj};}
 
 template<> jvalue to_jvalue(const std::string &obj, JNIEnv* env) {
     return to_jvalue(obj.c_str(), env);
