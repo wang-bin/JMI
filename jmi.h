@@ -8,6 +8,7 @@
 // TODO: reset error before each call, reset exception after each call (Aspect pattern?)
 // TODO: query class path if return/parameter type is jobject
 // TODO: object convert
+// TODO: gnu literal extension template<typename Ch, Ch ...c> constexpr auto operator""_jmis() { return StrLiteralToType<c...>{} }
 // java template, e.g. Range<T>
 // https://developer.android.com/training/articles/perf-jni#threads
 #pragma once
@@ -28,6 +29,11 @@
 # include <string_view>
 #elif !defined(_LIBCPP_STRING_VIEW)
 using string_view = std::string;
+#endif
+#if (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
+# define CONSTEXPR17 constexpr
+#else
+# define CONSTEXPR17 const
 #endif
 
 namespace jmi {
@@ -126,13 +132,8 @@ class JObject : public ClassTag
 {
 public:
     using Tag = CTag;
-#if (JMI_CXX17+0) && (JMI_USE_CXX17+0)
-    static constexpr auto className(); // array<char, N> for c++17+, string for otherwise
-    static constexpr auto signature(); // array<char, N> for c++17+, string for otherwise
-#else
-    static string className();
-    static string signature();
-#endif
+    static CONSTEXPR17 auto className(); // array<char, N> for c++17+, string for otherwise
+    static CONSTEXPR17 auto signature(); // array<char, N> for c++17+, string for otherwise
 
     // construct from an existing jobject. Usually obj is from native jni api containing a local ref, and it's local ref will be deleted if del_localref is true
     JObject(jobject obj = nullptr, bool del_localref = true) {
@@ -349,7 +350,16 @@ inline namespace impl {
     static inline string to_string(const string& s) noexcept { return s;}
 
 #if (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
-# define CONSTEXPR17 constexpr
+    template<typename F, size_t... I>
+    constexpr auto make_array(F&& f, index_sequence<I...>) { return array{ f(I)... };}
+    template<size_t N, typename F>
+    constexpr auto make_array(F&& f) { return make_array(forward<F>(f), make_index_sequence<N>{}); }
+
+    template<size_t N, typename A>
+    constexpr auto sub_array(A&& a, size_t i0) {
+        return make_array<N>([&](size_t i){ return a[i + i0]; });
+    }
+
     template <size_t N, typename T, size_t... I>
     constexpr auto to_array(T const* a, index_sequence<I...>) noexcept
     {
@@ -379,7 +389,7 @@ inline namespace impl {
     {
         return concat(a1, a2, make_index_sequence<N1>(), make_index_sequence<N2>());
     }
-// zconcat: assume input arrays are endwith T{}, remove the last T{} in a1, like c string concat
+// zconcat: assume input arrays are end with T{}, remove the last T{} in a1, like c string concat
     template <typename T, size_t N1, size_t N2>
     constexpr auto zconcat(array<T, N1> a1, array<T, N2> a2) noexcept
     {
@@ -397,6 +407,11 @@ inline namespace impl {
     {
         return zconcat(zconcat(std::forward<T1>(t1), std::forward<T2>(t2)), std::forward<Rest>(rest)...);
     }
+// input a and returned sub array are T{}(null) terminated
+    template<size_t S, typename T, size_t N>
+    constexpr auto zsub(array<T, N> a, size_t i0) {
+        return concat(sub_array<S>(a, i0), array{T{}});
+    }
 
     template<size_t N, size_t... I>
     constexpr auto norm_impl(array<char, N> a, index_sequence<I...>) noexcept
@@ -407,6 +422,7 @@ inline namespace impl {
     template<size_t N>
     constexpr auto norm(array<char, N> a) noexcept
     {
+        // if constexpr (a[0] == 'L' && a[N - 1] == ';'): a[0] is not a constant expression
         return norm_impl(a, make_index_sequence<N>{});
     }
 
@@ -423,10 +439,9 @@ inline namespace impl {
         return N1 == N2 && equal(a.begin(), a.end(), begin(s));
     }
 #else
-# define CONSTEXPR17 const
     static inline string to_string(const char& s) noexcept { return {s};}
     template<size_t N>
-    const string to_string(const char (&s)[N]) noexcept { return s;}
+    string to_string(const char (&s)[N]) noexcept { return s;}
 
     template<size_t N>
     constexpr const char* to_array(const char (&s)[N]) noexcept { return s;}
@@ -931,36 +946,25 @@ namespace detail {
     }
 } // namespace detail
 
+template<class CTag>
+CONSTEXPR17 auto JObject<CTag>::className()
+{
 #if (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
-template<class CTag>
-constexpr auto JObject<CTag>::className()
-{
-    return impl::norm(CTag::name());
-}
-
-template<class CTag>
-constexpr auto JObject<CTag>::signature()
-{
-    if constexpr (className()[0]== 'L')
-        return className();
+    if constexpr (CTag::name()[0] == 'L' && CTag::name()[CTag::name().size() - 2] == ';') // N - 1 == '\0', check N - 2
+        return impl::norm(zsub<CTag::name().size() - 3>(CTag::name(), 1));
     else
-        return zconcat("L", className(), ";");
-}
+        return impl::norm(CTag::name());
 #else
-template<class CTag>
-string JObject<CTag>::className()
-{
-    static string s = impl::norm(CTag::name()); // TODO: remove L ;?
+    static string s = impl::norm(CTag::name());
     return s;
+#endif // (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
 }
 
 template<class CTag>
-string JObject<CTag>::signature()
+CONSTEXPR17 auto JObject<CTag>::signature()
 {
-    return "L" + className() + ";";
+    return zconcat("L", className(), ";");
 }
-#endif // (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
-
 
 template<class CTag>
 JObject<CTag>& JObject<CTag>::reset(jobject obj, JNIEnv *env) {
