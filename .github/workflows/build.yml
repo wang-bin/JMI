@@ -5,6 +5,21 @@ on:
 # JAVA_HOME_13_X64 for win, JAVA_HOME_11_X64 otherwise
 
 jobs:
+  MSVC:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+    - name: Build
+      run: |
+        cmake  -DCMAKE_BUILD_TYPE=Release .
+        cmake --build .
+    - name: Test
+      run: |
+        ctest
+
   AppleClang:
     runs-on: macos-latest
     steps:
@@ -65,7 +80,6 @@ jobs:
       run: sudo apt install openjdk-11-jdk-headless
     - name: Build
       run: |
-        export CPATH=/usr/lib/jvm/adoptopenjdk-11-hotspot-amd64/include/linux # jni_md.h
         cmake -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=clang-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=clang++-${{ matrix.cc_ver }}  -DCMAKE_BUILD_TYPE=Release .
         cmake --build .
         ls -l lib* *.jar

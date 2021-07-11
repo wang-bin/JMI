@@ -18,21 +18,21 @@ using namespace jmi;
 
 void JMITestCached::resetStatic()
 {
-	constexpr const char* MethodName = __func__;
+	static constexpr auto MethodName = __func__;
 	struct ResetStatic : MethodTag { static const char* name() {return MethodName;}};
 	callStatic<ResetStatic>();
 }
 
 void JMITestCached::setX(jint v)
 {
-	constexpr const char* MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __FUNCTION__;
 	struct SetX : MethodTag { static const char* name() {return MethodName;}};
 	call<SetX>(v);
 }
 
 jint JMITestCached::getX() const
 {
-	constexpr const char* MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __FUNCTION__;
 	struct GetX : MethodTag { static const char* name() {return MethodName;}};
 	return call<jint, GetX>();
 }
@@ -81,21 +81,21 @@ std::string JMITestCached::sub(jint beginIndex, jint endIndex) const
 
 std::vector<std::string> JMITestCached::getStrArray() const
 {
-	constexpr const char* MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __FUNCTION__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return call<std::vector<std::string>, Get>();
 }
 
 std::vector<std::string> JMITestCached::getStrArrayS()
 {
-	constexpr const char* MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __FUNCTION__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return callStatic<std::vector<std::string>, Get>();
 }
 
 std::valarray<jint> JMITestCached::getIntArray() const
 {
-	constexpr const char* MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __FUNCTION__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return call<std::valarray<jint>, Get>();
 }
@@ -105,7 +105,7 @@ void JMITestCached::getIntArrayAsParam(jint v[2]) const
 	// now v is jint*
 	//jint (&out)[2] = reinterpret_cast<jint(&)[2]>(v);
 	jint out[2];
-	constexpr const char* MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __FUNCTION__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	call<Get>(std::ref(out));
 	v[0] = out[0];
@@ -114,21 +114,21 @@ void JMITestCached::getIntArrayAsParam(jint v[2]) const
 
 void JMITestCached::getIntArrayAsParam(std::array<jint, 2>& v) const
 {
-	constexpr const char* MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __FUNCTION__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	call<Get>(std::ref(v));
 }
 
 JMITestCached JMITestCached::getSelf() const
 {
-	constexpr const char* MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __FUNCTION__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return call<JMITestCached, Get>();
 }
 
 void JMITestCached::getSelfArray(array<JMITestCached,2> &v) const
 {
-	constexpr const char* MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __FUNCTION__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return call<Get>(std::ref(v));
 }
@@ -345,7 +345,7 @@ void test()
 	TEST(jtc.getX() == 2017);
 	jtc.setStr("why");
 	TEST(jtc.getStr() == "why");
-	int a0[2]{};
+	jint a0[2]{};
 	jtc.getIntArrayAsParam(a0);
 	TEST(a0[0] == 1);
 	TEST(a0[1] == 2017);
@@ -353,11 +353,11 @@ void test()
 	jtc.getIntArrayAsParam(std::ref(a0));
 	TEST(a0[1] == 2021);
 	jtc.setX(2017);
-	std::array<int, 2> a1;
+	std::array<jint, 2> a1;
 	jtc.getIntArrayAsParam(a1);
 	TEST(a1[0] == 1);
 	TEST(a1[1] == 2017);
-	std::valarray<int> av0 = jtc.getIntArray();
+	std::valarray<jint> av0 = jtc.getIntArray();
 	TEST(av0[0] == 1);
 	TEST(av0[1] == 2017);
 	auto sa = jtc.getStrArray();
@@ -401,7 +401,7 @@ void test()
 	jtuc.getIntArrayAsParam(a1);
 	TEST(a1[0] == 1);
 	TEST(a1[1] == 2017);
-	std::vector<int> av1 = jtuc.getIntArray();
+	std::vector<jint> av1 = jtuc.getIntArray();
 	TEST(av1[0] == 1);
 	TEST(av1[1] == 2017);
 	sa = jtuc.getStrArray();
