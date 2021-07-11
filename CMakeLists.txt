@@ -1,6 +1,8 @@
 project(jmi)
 cmake_minimum_required(VERSION 3.0)
-set(CMAKE_CXX_STANDARD 17)
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17) # TODO: option
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -31,6 +33,7 @@ target_link_libraries(jmi PUBLIC pthread) # linux
 
 add_executable(test_signature test/signature.cpp)
 target_link_libraries(test_signature PRIVATE jmi)
+
 add_library(JMITest SHARED test/JMITest.cpp)
 target_link_libraries(JMITest PRIVATE jmi)
 add_jar(test_jmi test/JMITest.java)

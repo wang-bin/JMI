@@ -18,8 +18,9 @@ jobs:
       #  JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
       run: |
         export JAVA_HOME=/usr/local/opt/openjdk
-        cmake .
+        cmake  -DCMAKE_BUILD_TYPE=Release .
         cmake --build .
+        ls -l lib* *.jar
     - name: Test
       #env:
       #  JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
@@ -33,6 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         cc_ver: [9, 10, 11]
+        std: [14, 17]
     steps:
     - uses: actions/checkout@v2
     - name: Install dev tools
@@ -42,8 +44,9 @@ jobs:
     - name: Build
       run: |
         export JAVA_HOME=/usr/local/opt/openjdk
-        cmake -DCMAKE_C_COMPILER=gcc-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.cc_ver }} .
+        cmake -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=gcc-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.cc_ver }} -DCMAKE_BUILD_TYPE=Release .
         cmake --build .
+        ls -l lib* *.jar
     - name: Test
       run: |
         export JAVA_HOME=/usr/local/opt/openjdk
@@ -55,6 +58,7 @@ jobs:
       fail-fast: false
       matrix:
         cc_ver: [10, 11, 12]
+        std: [14, 17]
     steps:
     - uses: actions/checkout@v2
     - name: Install dev tools
@@ -62,7 +66,8 @@ jobs:
     - name: Build
       run: |
         export CPATH=/usr/lib/jvm/adoptopenjdk-11-hotspot-amd64/include/linux # jni_md.h
-        cmake -DCMAKE_C_COMPILER=clang-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=clang++-${{ matrix.cc_ver }} .
+        cmake -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=clang-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=clang++-${{ matrix.cc_ver }}  -DCMAKE_BUILD_TYPE=Release .
         cmake --build .
+        ls -l lib* *.jar
     - name: Test
       run: ctest
