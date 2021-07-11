@@ -24,7 +24,7 @@
 - 创建 SurfaceTexture:
 ```
     // 在任意 jmi::JObject<SurfaceTexture> 可见范围内定义 SurfaceTexture tag 类
-    struct SurfaceTexture : jmi::ClassTag { static std::string name() {return "android/graphics/SurfaceTexture";}};
+    struct SurfaceTexture : jmi::ClassTag { static constexpr auto name() {return JMISTRM("android/graphics/SurfaceTexture");}};
     ...
     GLuint tex = ...
     ...
@@ -36,7 +36,7 @@
 
 - 从 SurfaceTexture 构造 Surface:
 ```
-    struct Surface : jmi::ClassTag { static std::string name() {return "android.view.Surface";}}; // '.' or '/'
+    struct Surface : jmi::ClassTag { static constexpr auto name() {return JMISTR("android.view.Surface");}}; // '.' or '/'
     ...
     jmi::JObject<Surface> surface;
     surface.create(texture);

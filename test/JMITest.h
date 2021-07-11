@@ -4,11 +4,11 @@
 #include <valarray>
 #include <vector>
 
-struct JMITestClassTag : jmi::ClassTag { static constexpr auto name() { return jmi::to_array("JMITest");} };
+struct JMITestClassTag : jmi::ClassTag { static constexpr auto name() { return JMISTR("JMITest");} };
 class JMITestCached : public jmi::JObject<JMITestCached> // or jmi::JObject<JMITestClassTag>
 {
 public:
-    static constexpr auto name() { return jmi::to_array("JMITest");} // required if derive from JObject<JMITestCached>
+    static constexpr auto name() { return JMISTR("JMITest");} // required if derive from JObject<JMITestCached>
     void setX(jint v);
     jint getX() const;
     static void setY(jint v);

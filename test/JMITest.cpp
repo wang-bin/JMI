@@ -220,7 +220,7 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	//static_assert(zconcat('1', '2') == array{'1', '2', '\0'});
 	//static_assert(zconcat(array{'1', '2', '\0'}, array{'3', '\0'}) == array{'1', '2', '3', '\0'});
 	//static_assert(zconcat(array{'1', '2', '\0'}, '3') == array{'1', '2', '3', '\0'});
-	//static_assert(jmi::signature_of<decltype(cxxa)>() == jmi::to_array("[B"));
+	//static_assert(jmi::signature_of<decltype(cxxa)>() == JMISTR("[B"));
 	struct JString : jmi::ClassTag {
 		static constexpr auto name() { return jmi::signature<std::string>::value;};//jmi::signature_of<std::string>();}
 	};
@@ -230,7 +230,7 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	auto js2 = jstr;
 	TEST(jstr.call<jint>("length") == 3);
 	TEST(jstr.error().empty());
-	cout << jstr.signature().data() << endl;
+	cout << jstr.signature().size() << jstr.signature().data() << endl << flush;
 	TEST(jstr.signature() == "Ljava/lang/String;");
 	jstr.reset();
 	jstr.create("abcd");
@@ -257,7 +257,7 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
     jstr.reset();
 	TEST(!jstr.create(ca));
 
-	struct JMITest : public jmi::ClassTag { static constexpr auto name() {return jmi::to_array("JMITest");} };
+	struct JMITest : public jmi::ClassTag { static constexpr auto name() {return JMISTR("JMITest");} };
 	jmi::JObject<JMITest> test;
 	struct Y : public jmi::FieldTag { static const char* name() { return "y";}};
 	auto y = test.getStatic<Y, jint>();

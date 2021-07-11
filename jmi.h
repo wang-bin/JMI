@@ -50,9 +50,11 @@ namespace android {
 jobject application(JNIEnv* env = nullptr); // TODO: return LocalRef
 } // namespace android
 
-struct ClassTag {}; // used by JObject<Tag>. subclasses must define static string/auto(array) name(), with or without "L ;" around
-struct MethodTag {}; // used by call() and callStatic(). subclasses must define static const char* name();
-struct FieldTag {}; // subclasses must define static const char* name();
+#define JMISTR(cstr) jmi::to_array(cstr) // cstr is a c string literal. the result is a const char* for c++14, array<char,N> for c++17
+
+struct ClassTag {}; // used by JObject<Tag>. subclasses must define static constexpr auto name() {return JMISTR("someName");}, with or without "L ;" around someName
+struct MethodTag {}; // used by call() and callStatic(). subclasses must define static const char* name() or static constexpr const char*();
+struct FieldTag {}; // subclasses must define static const char* name() or static constexpr const char*();
 
 namespace detail {
 // using var template requires c++14
