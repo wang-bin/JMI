@@ -446,7 +446,7 @@ inline namespace impl {
     template<size_t N>
     constexpr const char* to_array(const char (&s)[N]) noexcept { return s;}
     static inline auto to_array(const string& s) noexcept { return s;}
-    static inline string to_array(const char& s) noexcept { return {s};}
+    static inline string to_array(char s) noexcept { return {s};}
 
     template <typename T1>
     auto zconcat(T1 const& t1) noexcept { return to_string(t1);}
