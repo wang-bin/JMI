@@ -41,7 +41,9 @@ using namespace std;
 /*************************** JMI Public APIs Begin ***************************/
 #define JMI_MAJOR 0
 #define JMI_MINOR 1
-#define JMI_PATCH 0
+#define JMI_MICRO 0
+
+#define JMI_VERSION_STR JMI_STRINGIFY(JMI_MAJOR) "." JMI_STRINGIFY(JMI_MINOR) "." JMI_STRINGIFY(JMI_MICRO)
 
 // set JavaVM to vm if not null. return previous JavaVM
 JavaVM* javaVM(JavaVM *vm = nullptr, jint version = JNI_VERSION_1_4);
@@ -284,6 +286,8 @@ private:
 /*************************** JMI Public APIs End ***************************/
 } // namespace jmi
 
+#define JMI_STRINGIFY(X) _JMI_STRINGIFY(X)
+#define _JMI_STRINGIFY(X) #X
 
 namespace jmi {
 

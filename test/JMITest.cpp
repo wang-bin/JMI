@@ -1,6 +1,8 @@
 //#include <valarray>
 #include <jni.h>
 #include <iostream>
+#include <future>
+#include <thread>
 #include "jmi.h"
 #include "JMITest.h"
 
@@ -13,6 +15,13 @@
 
 using namespace std;
 using namespace jmi;
+
+void JMITestCached::resetStatic()
+{
+	constexpr const char* MethodName = __func__;
+	struct ResetStatic : MethodTag { static const char* name() {return MethodName;}};
+	callStatic<ResetStatic>();
+}
 
 void JMITestCached::setX(jint v)
 {
@@ -125,6 +134,11 @@ void JMITestCached::getSelfArray(array<JMITestCached,2> &v) const
 }
 
 
+void JMITestUncached::resetStatic()
+{
+	JObject<JMITestClassTag>::callStatic(__func__);
+}
+
 void JMITestUncached::setX(jint v)
 {
 	obj.call(__FUNCTION__, v);
@@ -195,22 +209,9 @@ void JMITestUncached::getIntArrayAsParam(std::array<jint, 2>& v) const
 	obj.call(__FUNCTION__, std::ref(v));
 }
 
-extern "C" {
-jint JNI_OnLoad(JavaVM* vm, void* reserved)
+void test()
 {
-	std::cout << "JNI_OnLoad" << std::endl;
-	JNIEnv* env = nullptr;
-	if (vm->GetEnv((void**) &env, JNI_VERSION_1_4) != JNI_OK || !env) {
-		std::cerr << "GetEnv for JNI_VERSION_1_4 failed" << std::endl;
-		return -1;
-	}
-    jmi::javaVM(vm);
-    return JNI_VERSION_1_4;
-}
-
-JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
-{
-    cout << "JMI Test" << endl;
+    cout << "JMI Test on thread: " << this_thread::get_id() << endl;
 	const jbyte cs[] = {'1', '2', '3'};
     std::array<jbyte, 3> cxxa{'a', 'b', 'c'};
 	//cout << zconcat('1', '2', '3').size() << endl;
@@ -257,6 +258,8 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
     jstr.reset();
 	TEST(!jstr.create(ca));
 
+	JMITestUncached::resetStatic();
+	JMITestCached::resetStatic();
 	struct JMITest : public jmi::ClassTag { static constexpr auto name() {return JMISTR("JMITest");} };
 	jmi::JObject<JMITest> test;
 	struct Y : public jmi::FieldTag { static const char* name() { return "y";}};
@@ -408,5 +411,35 @@ JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 	TEST(sa[0] == fsstr.get());
 	TEST(jtuc.sub(0, 2) == "wh");
 	TEST(JMITestUncached::getSub(1, 4, "1234") == "234");
+}
+
+void run() {
+	auto fut = async(launch::async, []{
+		test();
+	});
+	fut.wait();
+	async(launch::async, []{
+		test();
+	}).wait();
+	test();
+}
+
+extern "C" {
+jint JNI_OnLoad(JavaVM* vm, void* reserved)
+{
+	std::cout << "JNI_OnLoad" << std::endl;
+	JNIEnv* env = nullptr;
+	if (vm->GetEnv((void**) &env, JNI_VERSION_1_4) != JNI_OK || !env) {
+		std::cerr << "GetEnv for JNI_VERSION_1_4 failed" << std::endl;
+		return -1;
+	}
+    jmi::javaVM(vm);
+    return JNI_VERSION_1_4;
+}
+
+JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
+{
+	run();
+	//exit(0); // why block if run async test and use pthread tls?
 }
 } // extern "C"

@@ -9,6 +9,7 @@ class JMITestCached : public jmi::JObject<JMITestCached> // or jmi::JObject<JMIT
 {
 public:
     static constexpr auto name() { return JMISTR("JMITest");} // required if derive from JObject<JMITestCached>
+    static void resetStatic();
     void setX(jint v);
     jint getX() const;
     static void setY(jint v);
@@ -32,6 +33,7 @@ class JMITestUncached
 {
 public:
     bool create() { return obj.create(); } // DO NOT forget to call it
+    static void resetStatic();
     void setX(jint v);
     jint getX() const;
     static void setY(jint v);

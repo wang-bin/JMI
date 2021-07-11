@@ -10,6 +10,9 @@ public class JMITest {
         new JMITest().nativeTest();  // invoke the native method
     }
 
+    public static void resetStatic() {
+        y = 168;
+    }
     public void setX(int v) { x = v;}
     public int getX() { return x;}
     public static void setY(int v) { y = v;}
@@ -18,6 +21,7 @@ public class JMITest {
     public String getStr() { return str;}
     public static void getSStr(String[] s) {
         s[0] = " output  String[]";
+        sstr = "static text";
     }
     public static String getSub(int begin, int end, String s) {
         return s.substring(begin, end);

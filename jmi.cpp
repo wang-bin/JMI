@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2019 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2021 Wang Bin - wbsecg1@gmail.com
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -8,7 +8,21 @@
 #include <cassert>
 #include <iostream>
 #include <vector>
-#include <pthread.h>
+#include <thread>
+// Full thread local implementation: https://github.com/wang-bin/ThreadLocal or https://github.com/wang-bin/cppcompat/blob/master/include/cppcompat/thread_local.hpp
+#if defined(__MINGW32__)
+#elif (__clang__ + 0)
+# if __has_feature(cxx_thread_local)
+#   define HAS_STD_THREAD_LOCAL  (!(_LIBCPP_VERSION + 0)/*gnu stl, vcrt*/ || _LIBCPP_VERSION >= 4000)
+# endif
+#else
+# define HAS_STD_THREAD_LOCAL 1 // gcc4.9+, msvc19.0+ are min requirements for this project, they all support thread_local
+#endif
+#if (HAS_STD_THREAD_LOCAL + 0)
+# define STD_THREAD_LOCAL thread_local
+#else
+# define STD_THREAD_LOCAL
+#endif
 #if defined(__ANDROID__) || defined(ANDROID)
 #define OS_ANDROID
 #include <android/log.h>
@@ -43,26 +57,30 @@ JNIEnv *getEnv() {
         clog << "JMI ERROR: GetEnv " << status << endl;
         return nullptr;
     }
-    static pthread_key_t key_ = 0; // static var can be captured in lambda
-    static pthread_once_t key_once_ = PTHREAD_ONCE_INIT;
-    pthread_once(&key_once_, []{
-#ifdef OS_ANDROID
-        __android_log_print(ANDROID_LOG_INFO, "JMI",
-#else
-        printf(
-#endif
-        "JMI: JNI Modern Interface. Version %d.%d.%d\n", JMI_MAJOR, JMI_MINOR, JMI_PATCH);
 
-        pthread_key_create(&key_, [](void*){
+    clog << this_thread::get_id() << " JMI: JNI Modern Interface. Version " JMI_VERSION_STR "\n" << endl;
+
+    static STD_THREAD_LOCAL struct EnvTLS {
+        JNIEnv* jni = nullptr;
+        ~EnvTLS() {
+            //clog << this_thread::get_id() << " JMI thread exit" << endl;
             JNIEnv* env = nullptr;
             if (javaVM()->GetEnv((void**)&env, jni_ver) == JNI_EDETACHED)
                 return; //
             int status = javaVM()->DetachCurrentThread();
             if (status != JNI_OK)
                 clog <<  "JMI ERROR: DetachCurrentThread " << status << endl;
-        });
+        }
+    } envTls;
+    env = envTls.jni;
+#if !(HAS_STD_THREAD_LOCAL + 0)
+    static pthread_key_t key_ = 0;
+    static once_flag key_once_;
+    call_once(key_once_, []{
+        pthread_key_create(&key_, [](void*){ envTls.~EnvTLS(); });
     });
     env = (JNIEnv*)pthread_getspecific(key_);
+#endif
     if (env)
         clog << "JMI ERROR: TLS has a JNIEnv* but not attatched. Maybe detatched by user." << endl;
     JavaVMAttachArgs aa{};
@@ -76,11 +94,15 @@ JNIEnv *getEnv() {
         clog << "JMI ERROR: AttachCurrentThread " << status << endl;
         return nullptr;
     }
+#if (HAS_STD_THREAD_LOCAL + 0)
+    envTls.jni = env;
+#else
     if (pthread_setspecific(key_, env) != 0) {
         clog << "JMI ERROR: failed to set tls JNIEnv data" << endl;
         javaVM()->DetachCurrentThread();
         return nullptr;
     }
+#endif
     return env;
 }
 
