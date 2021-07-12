@@ -7,6 +7,7 @@
 #include "jmi.h"
 #include <cassert>
 #include <iostream>
+#include <mutex>
 #include <vector>
 #include <thread>
 // Full thread local implementation: https://github.com/wang-bin/ThreadLocal or https://github.com/wang-bin/cppcompat/blob/master/include/cppcompat/thread_local.hpp

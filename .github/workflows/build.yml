@@ -2,23 +2,31 @@ name: Build
 on:
   push:
 
-# JAVA_HOME_13_X64 for win, JAVA_HOME_11_X64 otherwise
+env:
+  NINJA_STATUS: '[%f/%t %e %r]'
 
 jobs:
   MSVC:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, amd64_x86]
     steps:
     - uses: actions/checkout@v2
+    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: ilammy/msvc-dev-cmd@v1
       with:
-        arch: x64
+        arch: ${{ matrix.arch }}
     - name: Build
       run: |
-        cmake  -DCMAKE_BUILD_TYPE=Release .
+        cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
         cmake --build .
+        ls
     - name: Test
+      if: ${{ matrix.arch == 'x64' }} # 64bit java.exe is selected for 32bit target
       run: |
-        ctest
+        ctest -V
 
   AppleClang:
     runs-on: macos-latest
@@ -33,39 +41,35 @@ jobs:
       #  JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
       run: |
         export JAVA_HOME=/usr/local/opt/openjdk
-        cmake  -DCMAKE_BUILD_TYPE=Release .
+        cmake  -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
         cmake --build .
-        ls -l lib* *.jar
     - name: Test
       #env:
       #  JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
       run: |
+        ls -l lib* *.jar
         export JAVA_HOME=/usr/local/opt/openjdk
-        ctest
+        ctest -V
 
   GCC:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        cc_ver: [9, 10, 11]
+        cc_ver: [9, 10]
         std: [14, 17]
     steps:
     - uses: actions/checkout@v2
     - name: Install dev tools
-      run: |
-        brew install openjdk
-        brew info openjdk
+      run: sudo apt install openjdk-11-jdk-headless
     - name: Build
       run: |
-        export JAVA_HOME=/usr/local/opt/openjdk
-        cmake -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=gcc-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.cc_ver }} -DCMAKE_BUILD_TYPE=Release .
+        cmake -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=gcc-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.cc_ver }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
         cmake --build .
-        ls -l lib* *.jar
     - name: Test
       run: |
-        export JAVA_HOME=/usr/local/opt/openjdk
-        ctest
+        ls -l lib* *.jar
+        ctest -V
 
   Clang:
     runs-on: ubuntu-latest
@@ -80,8 +84,8 @@ jobs:
       run: sudo apt install openjdk-11-jdk-headless
     - name: Build
       run: |
-        cmake -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=clang-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=clang++-${{ matrix.cc_ver }}  -DCMAKE_BUILD_TYPE=Release .
+        cmake -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=clang-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=clang++-${{ matrix.cc_ver }}  -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
         cmake --build .
         ls -l lib* *.jar
     - name: Test
-      run: ctest
+      run: ctest -V

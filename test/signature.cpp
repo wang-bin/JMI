@@ -7,11 +7,8 @@
 using namespace std;
 using namespace jmi;
 
-jint JNI_OnLoad(JavaVM* vm, void*)
+extern "C" jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 {
-    freopen("/sdcard/log.txt", "w", stdout);
-    freopen("/sdcard/loge.txt", "w", stderr);
-    std::cout << "JNI_OnLoad" << std::endl;
     JNIEnv* env = nullptr;
     if (vm->GetEnv((void**) &env, JNI_VERSION_1_4) != JNI_OK || !env) {
         std::cerr << "GetEnv for JNI_VERSION_1_4 failed" << std::endl;
@@ -21,10 +18,10 @@ jint JNI_OnLoad(JavaVM* vm, void*)
     return JNI_VERSION_1_4;
 }
 
-int write(jfloatArray, jint, jint) {return 0;}
+jint write(jfloatArray, jint, jint) {return 0;}
 
-void test1(int, const char* const, vector<jboolean>) {}
-int test2() {return 0;}
+void test1(jint, const char* const, vector<jboolean>) {}
+jint test2() {return 0;}
 std::string test3() {return string();}
 
 int main(int argc, char *argv[])
@@ -35,20 +32,20 @@ int main(int argc, char *argv[])
     cout << jmi::signature_of(write).data() << std::endl;
     //cout << jmi::signature_of(1.2f) << endl;
     cout << jmi::signature_of<std::string>().data() << endl;
-    std::valarray<float> f;
+    std::valarray<jfloat> f;
     cout << jmi::signature_of<decltype(&f)>() << endl;
     cout << jmi::signature_of<decltype(f)>().data() << endl;
     std::vector<std::string> s;
     cout << jmi::signature_of<decltype(std::ref(s))>().data() << endl;
     //std::vector<std::reference_wrapper<int>> v;
     //cout << jmi::signature_of(v);
-    std::array<int, 4> a;
+    std::array<jint, 4> a;
     cout << jmi::signature_of<decltype(a)>().data() << endl;
-    float mat4[16];
+    jfloat mat4[16];
     cout << jmi::signature_of<decltype(mat4)>().data() << endl;
     cout << "ref(mat4): " << jmi::signature_of<decltype(std::ref(mat4))>().data() << endl;
     //cout << "signature_of_args: " << jmi::signature_of_args<jint, jbyte, jlong>::value << endl;
-    //std::unordered_map<float, string> m;
+    //std::unordered_map<jfloat, string> m;
     //cout << jmi::signature_of(m);
     cout << "test1: " << signature_of(test1).data() << endl;
     cout << "test2: " << signature_of(test2).data() << endl;

@@ -14,7 +14,7 @@
 - 无需操心局部引用泄漏
 - getEnv() 支持任意线程，无需关心 detach
 - 编译器推导 java 类型及方法签名，并只生成一次
-- 支持 JNI 原生的各种类型、jmi 的 JObject、C/C++ string 及上述类型的数组形式(vector, valarray, array等) 作为函数参数、返回值及 field 类型
+- 支持 JNI 原生的基本类型、jmi 的 JObject、C/C++ string 及上述类型的数组形式(vector, valarray, array等) 作为函数参数、返回值及 field 类型
 - 提供了方便使用的常用函数: `to_string(std::string)`, `from_string(jstring)`, `android::application()`
 - 简单易用，用户代码极简
 
@@ -97,10 +97,10 @@ Field 接口支持可缓存和无缓存 jfieldID
     JObject<MyClassTag> obj;
     ...
     struct MyIntField : FieldTag { static const char* name() {return "myIntFieldName";} };
-    auto ifield = obj.field<int, MyIntField>();
+    auto ifield = obj.field<jint, MyIntField>();
     jfieldID ifid = ifield; // 或 ifield.id()
     ifield.set(1234);
-    int ivalue = ifield; // 或 ifield.get();
+    jint ivalue = ifield; // 或 ifield.get();
 
     // 静态 field 也一样，除了使用的是静态方法 JObject::staticField
     struct MyStrFieldS : FieldTag { static const char* name() {return "myStaticStrFieldName";} };
@@ -114,7 +114,7 @@ Field 接口支持可缓存和无缓存 jfieldID
 通过 field 名字使用无缓存 jfieldID
 
 ```
-    auto ifield = obj.field<int>("myIntFieldName");
+    auto ifield = obj.field<jint>("myIntFieldName");
     ...
 ```
 

@@ -12,8 +12,8 @@ public:
     static void resetStatic();
     void setX(jint v);
     jint getX() const;
-    static void setY(jint v);
-    static jint getY();
+    static void setY(jfloat v);
+    static jfloat getY();
     void setStr(const char* v);
     std::string getStr() const;
     // java array is of fixed size
@@ -36,8 +36,8 @@ public:
     static void resetStatic();
     void setX(jint v);
     jint getX() const;
-    static void setY(jint v);
-    static jint getY();
+    static void setY(jfloat v);
+    static jfloat getY();
 
     static std::string getSub(jint beginIndex, jint endIndex, std::string s);
     std::string sub(jint beginIndex, jint endIndex) const;

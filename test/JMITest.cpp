@@ -18,35 +18,35 @@ using namespace jmi;
 
 void JMITestCached::resetStatic()
 {
-	static constexpr auto MethodName = __func__;
+	static constexpr auto MethodName = __func__; //MUST use __func__. msvc __FUNCTION__ contains class name
 	struct ResetStatic : MethodTag { static const char* name() {return MethodName;}};
 	callStatic<ResetStatic>();
 }
 
 void JMITestCached::setX(jint v)
 {
-	static constexpr auto MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __func__;
 	struct SetX : MethodTag { static const char* name() {return MethodName;}};
 	call<SetX>(v);
 }
 
 jint JMITestCached::getX() const
 {
-	static constexpr auto MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __func__;
 	struct GetX : MethodTag { static const char* name() {return MethodName;}};
 	return call<jint, GetX>();
 }
 
-void JMITestCached::setY(jint v)
+void JMITestCached::setY(jfloat v)
 {
 	struct Set : MethodTag { static const char* name() {return "setY";}};
 	callStatic<Set>(v);
 }
 
-jint JMITestCached::getY()
+jfloat JMITestCached::getY()
 {
 	struct Get : MethodTag { static const char* name() {return "getY";}};
-	return callStatic<jint, Get>();
+	return callStatic<jfloat, Get>();
 }
 
 void JMITestCached::setStr(const char* v)
@@ -81,21 +81,21 @@ std::string JMITestCached::sub(jint beginIndex, jint endIndex) const
 
 std::vector<std::string> JMITestCached::getStrArray() const
 {
-	static constexpr auto MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __func__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return call<std::vector<std::string>, Get>();
 }
 
 std::vector<std::string> JMITestCached::getStrArrayS()
 {
-	static constexpr auto MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __func__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return callStatic<std::vector<std::string>, Get>();
 }
 
 std::valarray<jint> JMITestCached::getIntArray() const
 {
-	static constexpr auto MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __func__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return call<std::valarray<jint>, Get>();
 }
@@ -105,7 +105,7 @@ void JMITestCached::getIntArrayAsParam(jint v[2]) const
 	// now v is jint*
 	//jint (&out)[2] = reinterpret_cast<jint(&)[2]>(v);
 	jint out[2];
-	static constexpr auto MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __func__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	call<Get>(std::ref(out));
 	v[0] = out[0];
@@ -114,21 +114,21 @@ void JMITestCached::getIntArrayAsParam(jint v[2]) const
 
 void JMITestCached::getIntArrayAsParam(std::array<jint, 2>& v) const
 {
-	static constexpr auto MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __func__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	call<Get>(std::ref(v));
 }
 
 JMITestCached JMITestCached::getSelf() const
 {
-	static constexpr auto MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __func__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return call<JMITestCached, Get>();
 }
 
 void JMITestCached::getSelfArray(array<JMITestCached,2> &v) const
 {
-	static constexpr auto MethodName = __FUNCTION__;
+	static constexpr auto MethodName = __func__;
 	struct Get : MethodTag { static const char* name() {return MethodName;}};
 	return call<Get>(std::ref(v));
 }
@@ -141,22 +141,22 @@ void JMITestUncached::resetStatic()
 
 void JMITestUncached::setX(jint v)
 {
-	obj.call(__FUNCTION__, v);
+	obj.call(__func__, v);
 }
 
 jint JMITestUncached::getX() const
 {
-	return obj.call<jint>(__FUNCTION__);
+	return obj.call<jint>(__func__);
 }
 
-void JMITestUncached::setY(jint v)
+void JMITestUncached::setY(jfloat v)
 {
-	JObject<JMITestClassTag>::callStatic(__FUNCTION__, v);
+	JObject<JMITestClassTag>::callStatic(__func__, v);
 }
 
-jint JMITestUncached::getY()
+jfloat JMITestUncached::getY()
 {
-	return JObject<JMITestClassTag>::callStatic<jint>("getY");
+	return JObject<JMITestClassTag>::callStatic<jfloat>("getY");
 }
 
 void JMITestUncached::setStr(const string& v)
@@ -167,12 +167,12 @@ void JMITestUncached::setStr(const string& v)
 
 std::string JMITestUncached::getSub(jint beginIndex, jint endIndex, std::string s)
 {
-	return JObject<JMITestClassTag>::callStatic<std::string>(__FUNCTION__, beginIndex, endIndex, s);
+	return JObject<JMITestClassTag>::callStatic<std::string>(__func__, beginIndex, endIndex, s);
 }
 
 std::string JMITestUncached::sub(jint beginIndex, jint endIndex) const
 {
-	return obj.call<std::string>(__FUNCTION__, beginIndex, endIndex);
+	return obj.call<std::string>(__func__, beginIndex, endIndex);
 }
 
 std::string JMITestUncached::getStr() const
@@ -182,31 +182,31 @@ std::string JMITestUncached::getStr() const
 
 std::vector<std::string> JMITestUncached::getStrArrayS()
 {
-	return JObject<JMITestClassTag>::callStatic<std::vector<std::string>>(__FUNCTION__);
+	return JObject<JMITestClassTag>::callStatic<std::vector<std::string>>(__func__);
 }
 
 std::vector<std::string> JMITestUncached::getStrArray() const
 {
-	return obj.call<std::vector<std::string>>(__FUNCTION__);
+	return obj.call<std::vector<std::string>>(__func__);
 }
 
 std::vector<jint> JMITestUncached::getIntArray() const
 {
-	return obj.call<std::vector<jint>>(__FUNCTION__);
+	return obj.call<std::vector<jint>>(__func__);
 }
 
 void JMITestUncached::getIntArrayAsParam(jint v[2]) const
 {
 	// now v is jint*
 	jint out[2];
-	obj.call(__FUNCTION__, std::ref(out));
+	obj.call(__func__, std::ref(out));
 	v[0] = out[0];
 	v[1] = out[1];
 }
 
 void JMITestUncached::getIntArrayAsParam(std::array<jint, 2>& v) const
 {
-	obj.call(__FUNCTION__, std::ref(v));
+	obj.call(__func__, std::ref(v));
 }
 
 void test()
@@ -236,21 +236,21 @@ void test()
 	jstr.reset();
 	jstr.create("abcd");
 	TEST(jstr.call<jint>("length") == 4);
-	jchar ccc = jstr.call<jchar>("charAt", 2);
+	jchar ccc = jstr.call<jchar>("charAt", (jint)2);
 	TEST(ccc == 'c');
 	TEST(ccc == 'c');
 	TEST(jstr.error().empty());
 	//jmethodID mid= env->GetMethodID(js.get_class(),"charAt", "(I)C");
 	//std::cout << "[2]:" <<(char)env->CallCharMethod(js.instance(), mid, 2) << endl;
-	string sss = jmi::JObject<JString>::callStatic<std::string>("valueOf", 123);
+	string sss = jmi::JObject<JString>::callStatic<std::string>("valueOf", (jint)123);
 	TEST(sss == "123");
-	int ic = jstr.call<jint>("indexOf", std::string("c"), 1);
+	int ic = jstr.call<jint>("indexOf", std::string("c"), (jint)1);
 	TEST(ic == 2);
 	struct IndexOf : jmi::MethodTag { static const char* name() {return "indexOf";} };
-	ic = jstr.call<jint,IndexOf>(std::string("c"), 1);
+	ic = jstr.call<jint,IndexOf>(std::string("c"), (jint)1);
 	TEST(ic == 2);
 	TEST(jstr.error().empty());
-	ic = jstr.call<jint,IndexOf>(std::string("c"), 1);
+	ic = jstr.call<jint,IndexOf>(std::string("c"), (jint)1);
 	TEST(ic == 2);
 	TEST(jstr.error().empty());
     //jbyte ca[] = {'a', 'b', 'c', 'd'}; // why crash? why const crash?
@@ -263,10 +263,10 @@ void test()
 	struct JMITest : public jmi::ClassTag { static constexpr auto name() {return JMISTR("JMITest");} };
 	jmi::JObject<JMITest> test;
 	struct Y : public jmi::FieldTag { static const char* name() { return "y";}};
-	auto y = test.getStatic<Y, jint>();
+	auto y = test.getStatic<Y, jfloat>();
 	TEST(y == 168);
-	TEST(jmi::JObject<JMITest>::setStatic<Y>(1258));
-	auto yyy = test.getStatic<Y, jint>();
+	TEST(jmi::JObject<JMITest>::setStatic<Y>((jfloat)1258));
+	auto yyy = test.getStatic<Y, jfloat>();
 	TEST(yyy == 1258);
 
 	struct SStr : public jmi::FieldTag { static const char* name() { return "sstr";}};
@@ -302,7 +302,7 @@ void test()
 	struct X : public jmi::FieldTag { static const char* name() { return "x";}};
 	int x = test.get<X, jint>();
 	TEST(x == 0);
-	TEST(test.set<X>(3141));
+	TEST(test.set<X>((jint)3141));
 
 	cout << ">>>>>>>>>>>>testing Unacheable field APIs..." << endl;
 	auto str = test.get<std::string>("str");
@@ -425,7 +425,7 @@ void run() {
 }
 
 extern "C" {
-jint JNI_OnLoad(JavaVM* vm, void* reserved)
+jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved)
 {
 	std::cout << "JNI_OnLoad" << std::endl;
 	JNIEnv* env = nullptr;
@@ -437,9 +437,9 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
     return JNI_VERSION_1_4;
 }
 
-JNIEXPORT void Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
+JNIEXPORT void JNICALL Java_JMITest_nativeTest(JNIEnv *env , jobject thiz)
 {
 	run();
-	//exit(0); // why block if run async test and use pthread tls?
+	exit(0); // why block if run async test and use pthread tls?
 }
 } // extern "C"

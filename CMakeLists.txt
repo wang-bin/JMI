@@ -30,8 +30,9 @@ else()
 endif()
 include_directories(${CMAKE_SOURCE_DIR})
 add_library(jmi STATIC jmi.cpp)
-target_link_libraries(jmi PUBLIC pthread) # linux
-
+if(NOT WIN32)
+  target_link_libraries(jmi PUBLIC pthread) # linux
+endif()
 add_executable(test_signature test/signature.cpp)
 target_link_libraries(test_signature PRIVATE jmi)
 

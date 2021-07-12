@@ -15,8 +15,8 @@ public class JMITest {
     }
     public void setX(int v) { x = v;}
     public int getX() { return x;}
-    public static void setY(int v) { y = v;}
-    public static int getY() { return y;}
+    public static void setY(float v) { y = v;}
+    public static float getY() { return y;}
     public void setStr(String v) { str = v;}
     public String getStr() { return str;}
     public static void getSStr(String[] s) {
@@ -63,7 +63,7 @@ public class JMITest {
     }
 
     private int x;
-    private static int y = 168;
+    private static float y = 168;
     private String str = "text";
     private static String sstr = "static text";
     public JMITest self = this;
