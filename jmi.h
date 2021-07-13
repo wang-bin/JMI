@@ -283,6 +283,9 @@ private:
     jobject oid_ = nullptr;
     mutable string error_;
 };
+
+template<class CTag>
+using Object = JObject<CTag>;
 /*************************** JMI Public APIs End ***************************/
 } // namespace jmi
 

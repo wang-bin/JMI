@@ -5,7 +5,7 @@
 #include <vector>
 
 struct JMITestClassTag : jmi::ClassTag { static constexpr auto name() { return JMISTR("JMITest");} };
-class JMITestCached : public jmi::JObject<JMITestCached> // or jmi::JObject<JMITestClassTag>
+class JMITestCached : public jmi::Object<JMITestCached> // or jmi::JObject<JMITestClassTag>
 {
 public:
     static constexpr auto name() { return JMISTR("JMITest");} // required if derive from JObject<JMITestCached>
