@@ -95,7 +95,7 @@ inline constexpr auto signature_v = signature<T, is_enum_v<T>>::value;
 #endif
 // auto signature_of<T>() returns signature of object of type T, return type is array<char,N> for c++17+, string for c++14, and char. signature_of() returns signature of void type
 // signature of function ptr
-template<typename R, typename... Args> auto signature_of(R(*)(Args...));
+template<typename R, typename... Args> CONSTEXPR17 auto signature_of(R(*)(Args...));
 
 class LocalRef {
 public:
@@ -551,9 +551,8 @@ namespace detail {
 
 
 template<typename R, typename... Args>
-auto signature_of(R (*)(Args...)) {
-    static CONSTEXPR17 auto s = zconcat(detail::args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<R>::type>());;
-    return s;
+CONSTEXPR17 auto signature_of(R (*)(Args...)) {
+    return zconcat(detail::args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<R>::type>());;
 }
 
 namespace detail {
