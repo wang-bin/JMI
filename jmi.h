@@ -433,9 +433,7 @@ inline namespace impl {
     template<size_t N>
     string to_string(array<char, N> const& a) noexcept
     {
-        if (a[N])
-            return a.data();
-        return string(a.data(), N-1);
+        return {a.data(), a[N - 1] ? N : N - 1};
     }
 
     template<size_t N1, size_t N2>
