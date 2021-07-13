@@ -5,6 +5,8 @@
 
 [Some Java Classes Written in JMI](https://github.com/wang-bin/AND.git)
 
+[![Build status github](https://github.com/wang-bin/JMI/workflows/Build/badge.svg)](https://github.com/wang-bin/JMI/actions)
+
 ### Features
 
 - Compile time computed signature constant(C++17)

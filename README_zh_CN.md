@@ -5,6 +5,8 @@
 
 [一些使用 JMI 写的 Java 类](https://github.com/wang-bin/AND.git)
 
+[![Build status github](https://github.com/wang-bin/JMI/workflows/Build/badge.svg)](https://github.com/wang-bin/JMI/actions)
+
 ### 特性
 
 - 编译期计算出签名常量(C++17)
