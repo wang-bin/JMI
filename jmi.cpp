@@ -10,6 +10,7 @@
 #include <mutex>
 #include <vector>
 #include <thread>
+#include <tuple>
 // Full thread local implementation: https://github.com/wang-bin/ThreadLocal or https://github.com/wang-bin/cppcompat/blob/master/include/cppcompat/thread_local.hpp
 #if defined(__MINGW32__)
 #elif (__clang__ + 0)
@@ -24,13 +25,16 @@
 #else
 # define STD_THREAD_LOCAL
 #endif
-#if defined(__ANDROID__) || defined(ANDROID)
-#define OS_ANDROID
-#include <android/log.h>
-#endif
 
 using namespace std;
 namespace jmi {
+
+
+template<size_t N, class C, typename R, typename ...Args>
+constexpr auto param_at(R (C::*f)(Args...args)) noexcept
+{
+    return get<N>(make_tuple(Args{}...));
+}
 
 static jint jni_ver = JNI_VERSION_1_4;
 
@@ -86,11 +90,8 @@ JNIEnv *getEnv() {
         clog << "JMI ERROR: TLS has a JNIEnv* but not attatched. Maybe detatched by user." << endl;
     JavaVMAttachArgs aa{};
     aa.version = jni_ver;
-#ifdef OS_ANDROID
-    status = javaVM()->AttachCurrentThread(&env, &aa);
-#else
-    status = javaVM()->AttachCurrentThread((void**)&env, &aa);
-#endif
+    // 1st param of android: JNIEnv**, other platforms: void**
+    status = javaVM()->AttachCurrentThread(decltype(param_at<0>(&JavaVM::AttachCurrentThread))(&env), &aa);
     if (status != JNI_OK) {
         clog << "JMI ERROR: AttachCurrentThread " << status << endl;
         return nullptr;
@@ -107,7 +108,7 @@ JNIEnv *getEnv() {
     return env;
 }
 
-std::string to_string(jstring s, JNIEnv* env)
+string to_string(jstring s, JNIEnv* env)
 {
     if (!s)
         return string();
@@ -122,11 +123,11 @@ std::string to_string(jstring s, JNIEnv* env)
     return ss;
 }
 
-jstring from_string(const std::string &s, JNIEnv* env)
+jstring from_string(const string &s, JNIEnv* env)
 {
     if (!env)
         env = getEnv();
-    return env->NewStringUTF(s.c_str());
+    return env->NewStringUTF(s.data());
 }
 
 namespace android {
@@ -194,7 +195,7 @@ void call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) 
     env->CallVoidMethodA(obj_id, methodId, args);
 }
 template<>
-std::string call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
+string call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
     return to_string(static_cast<jstring>(call_method<jobject>(env, obj_id, methodId, args)), env);
 }
 
@@ -239,7 +240,7 @@ void call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue 
     env->CallStaticVoidMethodA(classId, methodId, args);
 }
 template<>
-std::string call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
+string call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
     return to_string(static_cast<jstring>(call_static_method<jobject>(env, classId, methodId, args)), env);
 }
 
@@ -253,7 +254,7 @@ template<> jvalue to_jvalue(const jlong &obj, JNIEnv* env) { jvalue v; v.j = obj
 template<> jvalue to_jvalue(const jfloat &obj, JNIEnv* env) { jvalue v; v.f = obj; return v;} //{ return jvalue{.f = obj};}
 template<> jvalue to_jvalue(const jdouble &obj, JNIEnv* env) { jvalue v; v.d = obj; return v;} //{ return jvalue{.d = obj};}
 
-template<> jvalue to_jvalue(const std::string &obj, JNIEnv* env) {
+template<> jvalue to_jvalue(const string &obj, JNIEnv* env) {
     return to_jvalue(obj.c_str(), env);
 }
 jvalue to_jvalue(const char* s, JNIEnv* env) {
@@ -262,7 +263,7 @@ jvalue to_jvalue(const char* s, JNIEnv* env) {
 
 template<>
 jarray make_jarray(JNIEnv *env, const jobject &element, size_t size) {
-    return env->NewObjectArray(size, env->GetObjectClass(element), 0);
+    return env->NewObjectArray((jsize)size, env->GetObjectClass(element), 0); // vc: warning C4267: 'argument': conversion from 'size_t' to 'jsize', possible loss of data
 }
 template<>
 jarray make_jarray(JNIEnv *env, const jboolean&, size_t size) {
@@ -297,7 +298,7 @@ jarray make_jarray(JNIEnv *env, const jdouble&, size_t size) {
     return env->NewDoubleArray(size);
 }
 template<>
-jarray make_jarray(JNIEnv *env, const std::string&, size_t size) {
+jarray make_jarray(JNIEnv *env, const string&, size_t size) {
     return env->NewObjectArray(size, env->FindClass("java/lang/String"), nullptr);
 }
 template<>
@@ -315,7 +316,7 @@ void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const bool &
     if (n == 1 || sizeof(jboolean) == sizeof(bool)) {
         env->SetBooleanArrayRegion((jbooleanArray)arr, position, n, (const jboolean*)&elm);
     } else {
-        std::vector<jboolean> tmp(n);
+        vector<jboolean> tmp(n);
         for (size_t i = 0; i < n; ++i)
             tmp[i] = *(&elm + i);
         env->SetBooleanArrayRegion((jbooleanArray)arr, position, n, tmp.data());
@@ -354,7 +355,7 @@ void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jdoubl
     env->SetDoubleArrayRegion((jdoubleArray)arr, position, n, &elm);
 }
 template<>
-void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const std::string &elm) {
+void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const string &elm) {
     for (size_t i = 0; i < n; ++i) {
         const string& s = *(&elm + i);
         set_jarray(env, arr, position + i, 1, (jobject)from_string(s, env));
@@ -364,45 +365,45 @@ void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const std::s
 // no need to specialize other types(jchar, jint etc.) because java parameters are passed by value but not reference. specialize jobject, jarray is ok, now we use jlong for them
 template<> void from_jvalue(JNIEnv*, const jvalue& v, jlong& t) { t = v.j;}
 
-template<> void from_jarray(JNIEnv* env, const jvalue& v, jboolean* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jboolean* t, size_t N)
 {
     env->GetBooleanArrayRegion(static_cast<jbooleanArray>(v.l), 0, N, t);
 }
-template<> void from_jarray(JNIEnv* env, const jvalue& v, jbyte* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jbyte* t, size_t N)
 {
     env->GetByteArrayRegion(static_cast<jbyteArray>(v.l), 0, N, t);
 }
-template<> void from_jarray(JNIEnv* env, const jvalue& v, jchar* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jchar* t, size_t N)
 {
     env->GetCharArrayRegion(static_cast<jcharArray>(v.l), 0, N, t);
 }
-template<> void from_jarray(JNIEnv* env, const jvalue& v, jshort* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jshort* t, size_t N)
 {
     env->GetShortArrayRegion(static_cast<jshortArray>(v.l), 0, N, t);
 }
-template<> void from_jarray(JNIEnv* env, const jvalue& v, jint* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jint* t, size_t N)
 {
     env->GetIntArrayRegion(static_cast<jintArray>(v.l), 0, N, t);
 }
-template<> void from_jarray(JNIEnv* env, const jvalue& v, jlong* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, jlong* t, size_t N)
 {
     env->GetLongArrayRegion(static_cast<jlongArray>(v.l), 0, N, t);
 }
-template<> void from_jarray(JNIEnv* env, const jvalue& v, float* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, float* t, size_t N)
 {
     env->GetFloatArrayRegion(static_cast<jfloatArray>(v.l), 0, N, t);
 }
-template<> void from_jarray(JNIEnv* env, const jvalue& v, double* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, double* t, size_t N)
 {
     env->GetDoubleArrayRegion(static_cast<jdoubleArray>(v.l), 0, N, t);
 }
-template<> void from_jarray(JNIEnv* env, const jvalue& v, char* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, char* t, size_t N)
 {
     env->GetByteArrayRegion(static_cast<jbyteArray>(v.l), 0, N, (jbyte*)t);
 }
-template<> void from_jarray(JNIEnv* env, const jvalue& v, std::string* t, std::size_t N)
+template<> void from_jarray(JNIEnv* env, const jvalue& v, string* t, size_t N)
 {
-    for (size_t i = 0; i < N; ++i) {
+    for (jsize i = 0; i < N; ++i) {
         auto s = env->GetObjectArrayElement(static_cast<jobjectArray>(v.l), i);
         *(t + i) = to_string((jstring)s); // local ref is deleted by to_string
     }
@@ -446,7 +447,7 @@ jdouble get_field(JNIEnv* env, jobject oid, jfieldID fid) {
     return env->GetDoubleField(oid, fid);
 }
 template<>
-std::string get_field(JNIEnv* env, jobject oid, jfieldID fid) {
+string get_field(JNIEnv* env, jobject oid, jfieldID fid) {
     return to_string((jstring)get_field<jobject>(env, oid, fid), env);
 }
 
@@ -487,7 +488,7 @@ void set_field(JNIEnv* env, jobject oid, jfieldID fid, jdouble&& v) {
     env->SetDoubleField(oid, fid, v);
 }
 template<>
-void set_field(JNIEnv* env, jobject oid, jfieldID fid, std::string&& v) {
+void set_field(JNIEnv* env, jobject oid, jfieldID fid, string&& v) {
     LocalRef js = {from_string(v, env), env};
     set_field(env, oid, fid, jobject(js));
 }
@@ -530,7 +531,7 @@ jdouble get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
     return env->GetStaticDoubleField(cid, fid);
 }
 template<>
-std::string get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
+string get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
     return to_string((jstring)get_static_field<jobject>(env, cid, fid), env);
 }
 
@@ -571,7 +572,7 @@ void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jdouble&& v) {
     env->SetStaticDoubleField(cid, fid, v);
 }
 template<>
-void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, std::string&& v) {
+void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, string&& v) {
     LocalRef js = {from_string(v), env};
     set_static_field(env, cid, fid, (jobject)js);
 }
