@@ -1,11 +1,30 @@
 name: Build
+
 on:
   push:
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [ master ]
+  schedule:
+    - cron: '31 4 * * 4'
 
 env:
   NINJA_STATUS: '[%f/%t %e %r]'
 
 jobs:
+  Android:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [armeabi-v7a, arm64-v8a]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build for armeabi-v7a
+      run: |
+        cmake -DCMAKE_SYSTEM_NAME=Android -DCMAKE_ANDROID_ARCH_ABI=${{ matrix.arch }} -DCMAKE_ANDROID_NDK=$ANDROID_NDK_LATEST_HOME -DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang -DCMAKE_ANDROID_STL_TYPE=c++_shared -DCMAKE_BUILD_TYPE=Release  -DCMAKE_VERBOSE_MAKEFILE=1 .
+        cmake --build .
+
   MSVC:
     runs-on: windows-latest
     strategy:
@@ -21,7 +40,7 @@ jobs:
         arch: ${{ matrix.arch }}
     - name: Build
       run: |
-        cmake -GNinja -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
+        cmake -DBUILD_TESTS=1 -GNinja -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
         cmake --build .
         ls
     - name: Test
@@ -42,7 +61,7 @@ jobs:
       #  JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
       run: |
         export JAVA_HOME=/usr/local/opt/openjdk
-        cmake  -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
+        cmake -DBUILD_TESTS=1 -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
         cmake --build .
     - name: Test
       #env:
@@ -65,7 +84,7 @@ jobs:
       run: sudo apt install openjdk-11-jdk-headless
     - name: Build
       run: |
-        cmake -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=gcc-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.cc_ver }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
+        cmake -DBUILD_TESTS=1 -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=gcc-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.cc_ver }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
         cmake --build .
     - name: Test
       run: |
@@ -85,7 +104,7 @@ jobs:
       run: sudo apt install openjdk-11-jdk-headless
     - name: Build
       run: |
-        cmake -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=clang-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=clang++-${{ matrix.cc_ver }}  -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
+        cmake -DBUILD_TESTS=1 -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=clang-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=clang++-${{ matrix.cc_ver }}  -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
         cmake --build .
         ls -l lib* *.jar
     - name: Test
