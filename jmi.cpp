@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2021 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2022 Wang Bin - wbsecg1@gmail.com
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -114,7 +114,7 @@ string to_string(jstring s, JNIEnv* env)
         return string();
     if (!env)
         env = getEnv();
-    const char* cs = env->GetStringUTFChars(s, 0);
+    const char* cs = env->GetStringUTFChars(s, nullptr);
     if (!cs)
         return string();
     string ss(cs);
@@ -263,96 +263,96 @@ jvalue to_jvalue(const char* s, JNIEnv* env) {
 
 template<>
 jarray make_jarray(JNIEnv *env, const jobject &element, size_t size) {
-    return env->NewObjectArray((jsize)size, env->GetObjectClass(element), 0); // vc: warning C4267: 'argument': conversion from 'size_t' to 'jsize', possible loss of data
+    return env->NewObjectArray((jsize)size, env->GetObjectClass(element), nullptr); // vc: warning C4267: 'argument': conversion from 'size_t' to 'jsize', possible loss of data
 }
 template<>
 jarray make_jarray(JNIEnv *env, const jboolean&, size_t size) {
-    return env->NewBooleanArray(size);
+    return env->NewBooleanArray((jsize)size);
 }
 template<>
 jarray make_jarray(JNIEnv *env, const jbyte&, size_t size) {
-    return env->NewByteArray(size); // must DeleteLocalRef
+    return env->NewByteArray((jsize)size); // must DeleteLocalRef
 }
 template<>
 jarray make_jarray(JNIEnv *env, const jchar&, size_t size) {
-    return env->NewCharArray(size);
+    return env->NewCharArray((jsize)size);
 }
 template<>
 jarray make_jarray(JNIEnv *env, const jshort&, size_t size) {
-    return env->NewShortArray(size);
+    return env->NewShortArray((jsize)size);
 }
 template<>
 jarray make_jarray(JNIEnv *env, const jint&, size_t size) {
-    return env->NewIntArray(size);
+    return env->NewIntArray((jsize)size);
 }
 template<>
 jarray make_jarray(JNIEnv *env, const jlong&, size_t size) {
-    return env->NewLongArray(size);
+    return env->NewLongArray((jsize)size);
 }
 template<>
 jarray make_jarray(JNIEnv *env, const jfloat&, size_t size) {
-    return env->NewFloatArray(size);
+    return env->NewFloatArray((jsize)size);
 }
 template<>
 jarray make_jarray(JNIEnv *env, const jdouble&, size_t size) {
-    return env->NewDoubleArray(size);
+    return env->NewDoubleArray((jsize)size);
 }
 template<>
 jarray make_jarray(JNIEnv *env, const string&, size_t size) {
-    return env->NewObjectArray(size, env->FindClass("java/lang/String"), nullptr);
+    return env->NewObjectArray((jsize)size, env->FindClass("java/lang/String"), nullptr);
 }
 template<>
 jarray make_jarray(JNIEnv *env, const char&, size_t size) {
-    return env->NewByteArray(size); // must DeleteLocalRef
+    return env->NewByteArray((jsize)size); // must DeleteLocalRef
 }
 
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jobject &elm) {
     assert(n == 1 && "set only 1 jobject array element is allowed");
-    env->SetObjectArrayElement((jobjectArray)arr, position, elm);
+    env->SetObjectArrayElement((jobjectArray)arr, (jsize)position, elm);
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const bool &elm) {
     if (n == 1 || sizeof(jboolean) == sizeof(bool)) {
-        env->SetBooleanArrayRegion((jbooleanArray)arr, position, n, (const jboolean*)&elm);
+        env->SetBooleanArrayRegion((jbooleanArray)arr, (jsize)position, (jsize)n, (const jboolean*)&elm);
     } else {
         vector<jboolean> tmp(n);
         for (size_t i = 0; i < n; ++i)
             tmp[i] = *(&elm + i);
-        env->SetBooleanArrayRegion((jbooleanArray)arr, position, n, tmp.data());
+        env->SetBooleanArrayRegion((jbooleanArray)arr, (jsize)position, (jsize)n, tmp.data());
     }
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jboolean &elm) {
-    env->SetBooleanArrayRegion((jbooleanArray)arr, position, n, &elm);
+    env->SetBooleanArrayRegion((jbooleanArray)arr, (jsize)position, (jsize)n, &elm);
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jbyte &elm) {
-    env->SetByteArrayRegion((jbyteArray)arr, position, n, &elm);
+    env->SetByteArrayRegion((jbyteArray)arr, (jsize)position, (jsize)n, &elm);
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jchar &elm) {
-    env->SetCharArrayRegion((jcharArray)arr, position, n, &elm);
+    env->SetCharArrayRegion((jcharArray)arr, (jsize)position, (jsize)n, &elm);
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jshort &elm) {
-    env->SetShortArrayRegion((jshortArray)arr, position, n, &elm);
+    env->SetShortArrayRegion((jshortArray)arr, (jsize)position, (jsize)n, &elm);
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jint &elm) {
-    env->SetIntArrayRegion((jintArray)arr, position, n, &elm);
+    env->SetIntArrayRegion((jintArray)arr, (jsize)position, (jsize)n, &elm);
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jlong &elm) {
-    env->SetLongArrayRegion((jlongArray)arr, position, n, &elm);
+    env->SetLongArrayRegion((jlongArray)arr, (jsize)position, (jsize)n, &elm);
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jfloat &elm) {
-    env->SetFloatArrayRegion((jfloatArray)arr, position, n, &elm);
+    env->SetFloatArrayRegion((jfloatArray)arr, (jsize)position, (jsize)n, &elm);
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jdouble &elm) {
-    env->SetDoubleArrayRegion((jdoubleArray)arr, position, n, &elm);
+    env->SetDoubleArrayRegion((jdoubleArray)arr, (jsize)position, (jsize)n, &elm);
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const string &elm) {
@@ -367,39 +367,39 @@ template<> void from_jvalue(JNIEnv*, const jvalue& v, jlong& t) { t = v.j;}
 
 template<> void from_jarray(JNIEnv* env, const jvalue& v, jboolean* t, size_t N)
 {
-    env->GetBooleanArrayRegion(static_cast<jbooleanArray>(v.l), 0, N, t);
+    env->GetBooleanArrayRegion(static_cast<jbooleanArray>(v.l), 0, (jsize)N, t);
 }
 template<> void from_jarray(JNIEnv* env, const jvalue& v, jbyte* t, size_t N)
 {
-    env->GetByteArrayRegion(static_cast<jbyteArray>(v.l), 0, N, t);
+    env->GetByteArrayRegion(static_cast<jbyteArray>(v.l), 0, (jsize)N, t);
 }
 template<> void from_jarray(JNIEnv* env, const jvalue& v, jchar* t, size_t N)
 {
-    env->GetCharArrayRegion(static_cast<jcharArray>(v.l), 0, N, t);
+    env->GetCharArrayRegion(static_cast<jcharArray>(v.l), 0, (jsize)N, t);
 }
 template<> void from_jarray(JNIEnv* env, const jvalue& v, jshort* t, size_t N)
 {
-    env->GetShortArrayRegion(static_cast<jshortArray>(v.l), 0, N, t);
+    env->GetShortArrayRegion(static_cast<jshortArray>(v.l), 0, (jsize)N, t);
 }
 template<> void from_jarray(JNIEnv* env, const jvalue& v, jint* t, size_t N)
 {
-    env->GetIntArrayRegion(static_cast<jintArray>(v.l), 0, N, t);
+    env->GetIntArrayRegion(static_cast<jintArray>(v.l), 0, (jsize)N, t);
 }
 template<> void from_jarray(JNIEnv* env, const jvalue& v, jlong* t, size_t N)
 {
-    env->GetLongArrayRegion(static_cast<jlongArray>(v.l), 0, N, t);
+    env->GetLongArrayRegion(static_cast<jlongArray>(v.l), 0, (jsize)N, t);
 }
 template<> void from_jarray(JNIEnv* env, const jvalue& v, float* t, size_t N)
 {
-    env->GetFloatArrayRegion(static_cast<jfloatArray>(v.l), 0, N, t);
+    env->GetFloatArrayRegion(static_cast<jfloatArray>(v.l), 0, (jsize)N, t);
 }
 template<> void from_jarray(JNIEnv* env, const jvalue& v, double* t, size_t N)
 {
-    env->GetDoubleArrayRegion(static_cast<jdoubleArray>(v.l), 0, N, t);
+    env->GetDoubleArrayRegion(static_cast<jdoubleArray>(v.l), 0, (jsize)N, t);
 }
 template<> void from_jarray(JNIEnv* env, const jvalue& v, char* t, size_t N)
 {
-    env->GetByteArrayRegion(static_cast<jbyteArray>(v.l), 0, N, (jbyte*)t);
+    env->GetByteArrayRegion(static_cast<jbyteArray>(v.l), 0, (jsize)N, (jbyte*)t);
 }
 template<> void from_jarray(JNIEnv* env, const jvalue& v, string* t, size_t N)
 {
