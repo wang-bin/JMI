@@ -20,7 +20,11 @@
 #else
 # define HAS_STD_THREAD_LOCAL 1 // gcc4.9+, msvc19.0+ are min requirements for this project, they all support thread_local
 #endif
-#if (HAS_STD_THREAD_LOCAL + 0)
+/*
+  android does not support ELF TLS before api level 29(android 10), and always use emutls even if targeting 29+, but no way to detect whether emutls is used.
+  libc++ expports __emutls_get_address in ndk23 and user dso will not compatible with old libc++. https://github.com/llvm/llvm-project/issues/51839
+ */
+#if (HAS_STD_THREAD_LOCAL + 0) && !(__BIONIC__ + 0)
 # define STD_THREAD_LOCAL thread_local
 #else
 # define STD_THREAD_LOCAL
