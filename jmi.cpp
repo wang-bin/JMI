@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2022 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2023 Wang Bin - wbsecg1@gmail.com
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -26,6 +26,7 @@
  */
 #if (HAS_STD_THREAD_LOCAL + 0) && !(__BIONIC__ + 0)
 # define STD_THREAD_LOCAL thread_local
+# define USE_STD_THREAD_LOCAL 1
 #else
 # define STD_THREAD_LOCAL
 #endif
@@ -50,6 +51,17 @@ JavaVM* javaVM(JavaVM *vm, jint v) {
     return jvm_;
 }
 
+static void detach(void* = nullptr)
+{
+    clog << this_thread::get_id() << " JMI thread exit" << endl;
+    JNIEnv* env = nullptr;
+    if (javaVM()->GetEnv((void**)&env, jni_ver) == JNI_EDETACHED)
+        return; //
+    const int status = javaVM()->DetachCurrentThread();
+    if (status != JNI_OK)
+        clog << "JMI ERROR: DetachCurrentThread " << status << endl;
+};
+
 JNIEnv *getEnv() {
     assert(javaVM() && "javaVM() is null");
     if (!javaVM()) {
@@ -69,29 +81,24 @@ JNIEnv *getEnv() {
 
     clog << this_thread::get_id() << " JMI: JNI Modern Interface. Version " JMI_VERSION_STR "\n" << endl;
 
+#if (USE_STD_THREAD_LOCAL + 0)
     static STD_THREAD_LOCAL struct EnvTLS {
         JNIEnv* jni = nullptr;
         ~EnvTLS() {
-            //clog << this_thread::get_id() << " JMI thread exit" << endl;
-            JNIEnv* env = nullptr;
-            if (javaVM()->GetEnv((void**)&env, jni_ver) == JNI_EDETACHED)
-                return; //
-            int status = javaVM()->DetachCurrentThread();
-            if (status != JNI_OK)
-                clog <<  "JMI ERROR: DetachCurrentThread " << status << endl;
+            detach();
         }
     } envTls;
     env = envTls.jni;
-#if !(HAS_STD_THREAD_LOCAL + 0)
+#else
     static pthread_key_t key_ = 0;
     static once_flag key_once_;
     call_once(key_once_, []{
-        pthread_key_create(&key_, [](void*){ envTls.~EnvTLS(); });
+        pthread_key_create(&key_, detach);
     });
     env = (JNIEnv*)pthread_getspecific(key_);
 #endif
     if (env)
-        clog << "JMI ERROR: TLS has a JNIEnv* but not attatched. Maybe detatched by user." << endl;
+        clog << "JMI ERROR: TLS has a JNIEnv* but not attatched. Maybe detatched by user." << endl; // FIXME:
     JavaVMAttachArgs aa{};
     aa.version = jni_ver;
     // 1st param of android: JNIEnv**, other platforms: void**
@@ -100,7 +107,7 @@ JNIEnv *getEnv() {
         clog << "JMI ERROR: AttachCurrentThread " << status << endl;
         return nullptr;
     }
-#if (HAS_STD_THREAD_LOCAL + 0)
+#if (USE_STD_THREAD_LOCAL + 0)
     envTls.jni = env;
 #else
     if (pthread_setspecific(key_, env) != 0) {
@@ -115,12 +122,12 @@ JNIEnv *getEnv() {
 string to_string(jstring s, JNIEnv* env)
 {
     if (!s)
-        return string();
+        return {};
     if (!env)
         env = getEnv();
     const char* cs = env->GetStringUTFChars(s, nullptr);
     if (!cs)
-        return string();
+        return {};
     string ss(cs);
     env->ReleaseStringUTFChars(s, cs);
     env->DeleteLocalRef(s);
@@ -139,10 +146,10 @@ jobject application(JNIEnv* env)
 {
     if (!env)
         env = jmi::getEnv();
-    LocalRef c_at = {env->FindClass("android/app/ActivityThread"), env};
+    const LocalRef c_at = {env->FindClass("android/app/ActivityThread"), env};
     static jmethodID m_cat = env->GetStaticMethodID(c_at, "currentActivityThread", "()Landroid/app/ActivityThread;");
     static jmethodID m_ga = env->GetMethodID(c_at, "getApplication", "()Landroid/app/Application;");
-    LocalRef at = {env->CallStaticObjectMethod(c_at, m_cat), env};
+    const LocalRef at = {env->CallStaticObjectMethod(c_at, m_cat), env};
     return env->CallObjectMethod(at, m_ga);
 }
 } // namespace android
@@ -493,7 +500,7 @@ void set_field(JNIEnv* env, jobject oid, jfieldID fid, jdouble&& v) {
 }
 template<>
 void set_field(JNIEnv* env, jobject oid, jfieldID fid, string&& v) {
-    LocalRef js = {from_string(v, env), env};
+    const LocalRef js = {from_string(v, env), env};
     set_field(env, oid, fid, jobject(js));
 }
 
@@ -577,7 +584,7 @@ void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, jdouble&& v) {
 }
 template<>
 void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, string&& v) {
-    LocalRef js = {from_string(v), env};
+    const LocalRef js = {from_string(v), env};
     set_static_field(env, cid, fid, (jobject)js);
 }
 } // namespace detail
