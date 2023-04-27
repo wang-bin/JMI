@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2021 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2023 Wang Bin - wbsecg1@gmail.com
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -239,7 +239,7 @@ public:
         F get() const;
         void set(F&& v);
         Field& operator=(F&& v) {
-            set(forward<F>(v));
+            set(std::forward<F>(v));
             return *this;
         }
     protected:
@@ -276,7 +276,7 @@ public:
 private:
     static jclass classId(JNIEnv* env = nullptr);
     JObject& setError(string&& s) const {
-        error_ = move(s);
+        error_ = std::move(s);
         return *const_cast<JObject*>(this);
     }
 
@@ -360,7 +360,7 @@ inline namespace impl {
     template<typename F, size_t... I>
     constexpr auto make_array(F&& f, index_sequence<I...>) { return array{ f(I)... };}
     template<size_t N, typename F>
-    constexpr auto make_array(F&& f) { return make_array(forward<F>(f), make_index_sequence<N>{}); }
+    constexpr auto make_array(F&& f) { return make_array(std::forward<F>(f), make_index_sequence<N>{}); }
 
     template<size_t N, typename A>
     constexpr auto sub_array(A&& a, size_t i0) {
@@ -564,8 +564,8 @@ namespace detail {
         F f_;
         bool invoke_;
     public:
-        scope_exit_handler(F f) noexcept : f_(move(f)), invoke_(true) {}
-        scope_exit_handler(scope_exit_handler&& other) noexcept : f_(move(other.f_)), invoke_(other.invoke_) {
+        scope_exit_handler(F f) noexcept : f_(std::move(f)), invoke_(true) {}
+        scope_exit_handler(scope_exit_handler&& other) noexcept : f_(std::move(other.f_)), invoke_(other.invoke_) {
             other.invoke_ = false;
         }
         ~scope_exit_handler() {
@@ -581,7 +581,7 @@ namespace detail {
     }
     template<class F>
     scope_exit_handler<F> call_on_exit(F&& f) noexcept {
-        return scope_exit_handler<F>(forward<F>(f));
+        return scope_exit_handler<F>(std::forward<F>(f));
     }
 
     template<typename T, if_not_JObject<T> = true>
@@ -710,8 +710,8 @@ namespace detail {
     static inline void ref_args_from_jvalues(JNIEnv*, jvalue*) {}
     template<typename Arg, typename... Args>
     void ref_args_from_jvalues(JNIEnv* env, jvalue *jargs, Arg&& arg, Args&&... args) {
-        set_ref_from_jvalue(env, jargs, forward<Arg>(arg));
-        ref_args_from_jvalues(env, jargs + 1, forward<Args>(args)...);
+        set_ref_from_jvalue(env, jargs, std::forward<Arg>(arg));
+        ref_args_from_jvalues(env, jargs + 1, std::forward<Args>(args)...);
     }
 
     template<typename T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
@@ -769,7 +769,7 @@ namespace detail {
     }
     template<typename T, typename... Args>
     T call_static_method_set_ref(JNIEnv *env, jclass cid, jmethodID mid, jvalue *jargs, Args&&... args) {
-        auto setter = call_on_exit([=]{ // forward?
+        auto setter = call_on_exit([=]{ // std::forward?
             ref_args_from_jvalues(env, jargs, args...);
         });
         return call_static_method<T>(env, cid, mid, jargs);
@@ -787,7 +787,7 @@ namespace detail {
             return T();
         }
         JNIEnv *env = getEnv();
-        auto checker = call_on_exit([=]{
+        const auto checker = call_on_exit([=]{
             if (handle_exception(env)) {
                 if (err_cb)
                     err_cb(string("Failed to call method '") + name + "' with signature '" + signature + "'.");
@@ -803,7 +803,7 @@ namespace detail {
         }
         if (!mid || env->ExceptionCheck())
             return T();
-        return call_method_set_ref<T>(env, oid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin()), forward<Args>(args)...);
+        return call_method_set_ref<T>(env, oid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(std::forward<Args>(args), env)...}).begin()), std::forward<Args>(args)...);
     }
 
     template<typename T, typename... Args>
@@ -829,7 +829,7 @@ namespace detail {
         }
         if (!mid || env->ExceptionCheck())
             return T();
-        return call_static_method_set_ref<T>(env, cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin()), forward<Args>(args)...);
+        return call_static_method_set_ref<T>(env, cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(std::forward<Args>(args), env)...}).begin()), std::forward<Args>(args)...);
     }
 
 
@@ -877,7 +877,7 @@ namespace detail {
         jfieldID fid = get_field_id<T>(env, cid, name, pfid);
         if (!fid)
             return;
-        set_field<T>(env, oid, fid, forward<T>(v));
+        set_field<T>(env, oid, fid, std::forward<T>(v));
     }
 
     template<typename T>
@@ -921,7 +921,7 @@ namespace detail {
         jfieldID fid = get_static_field_id<T>(env, cid, name, pfid);
         if (!fid)
             return;
-        set_static_field<T>(env, cid, fid, forward<T>(v));
+        set_static_field<T>(env, cid, fid, std::forward<T>(v));
     }
 
     template<typename T>
@@ -1008,14 +1008,14 @@ bool JObject<CTag>::create(Args&&... args) {
         setError("Failed to find class '" + to_string(className()) + "'");
         return false;
     }
-    auto checker = call_on_exit([=]{ handle_exception(env); });
+    const auto checker = call_on_exit([=]{ handle_exception(env); });
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of()); // void
     static const jmethodID mid = env->GetMethodID(cid, "<init>", s.data()); // can be static because class id, signature and arguments combination is unique
     if (!mid) {
         setError(string("Failed to find constructor of '") + className().data() + "' with signature '" + s.data() + "'.");
         return false;
     }
-    LocalRef oid = env->NewObjectA(cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(forward<Args>(args), env)...}).begin())); // ptr0(jv) crash
+    LocalRef oid = env->NewObjectA(cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(std::forward<Args>(args), env)...}).begin())); // ptr0(jv) crash
     if (!oid) {
         setError(string("Failed to call constructor '") + className().data() + "' with signature '" + s.data() + "'.");
         return false;
@@ -1030,7 +1030,7 @@ T JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
     static jmethodID mid = nullptr;
-    return call_with_methodID<T>(oid_, classId(), &mid, [this](string&& err){ setError(move(err));}, s.data(), MTag::name(), forward<Args>(args)...);
+    return call_with_methodID<T>(oid_, classId(), &mid, [this](string&& err){ setError(std::move(err));}, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<class MTag, typename... Args, detail::if_MethodTag<MTag>>
@@ -1038,7 +1038,7 @@ void JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
     static jmethodID mid = nullptr;
-    call_with_methodID<void>(oid_, classId(), &mid, [this](string&& err){ setError(move(err));}, s.data(), MTag::name(), forward<Args>(args)...);
+    call_with_methodID<void>(oid_, classId(), &mid, [this](string&& err){ setError(std::move(err));}, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
@@ -1046,7 +1046,7 @@ T JObject<CTag>::callStatic(Args&&... args) {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
     static jmethodID mid = nullptr;
-    return call_static_with_methodID<T>(classId(), &mid, nullptr, s.data(), MTag::name(), forward<Args>(args)...);
+    return call_static_with_methodID<T>(classId(), &mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<class MTag, typename... Args,  detail::if_MethodTag<MTag>>
@@ -1054,7 +1054,7 @@ void JObject<CTag>::callStatic(Args&&... args) {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
     static jmethodID mid = nullptr;
-    return call_static_with_methodID<void>(classId(), &mid, nullptr, s.data(), MTag::name(), forward<Args>(args)...);
+    return call_static_with_methodID<void>(classId(), &mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 
 template<class CTag>
@@ -1075,7 +1075,7 @@ bool JObject<CTag>::set(T&& v) {
         if (detail::handle_exception())
             setError(string("Failed to set field '") + FTag::name() + "' with signature '" + signature_of<T>().data() + "'.");
     });
-    detail::set_field<T>(oid_, classId(), &fid, FTag::name(), forward<T>(v));
+    detail::set_field<T>(oid_, classId(), &fid, FTag::name(), std::forward<T>(v));
     return true;
 }
 template<class CTag>
@@ -1088,7 +1088,7 @@ template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
 bool JObject<CTag>::setStatic(T&& v) {
     static jfieldID fid = nullptr;
-    detail::set_static_field<T>(classId(), &fid, FTag::name(), forward<T>(v));
+    detail::set_static_field<T>(classId(), &fid, FTag::name(), std::forward<T>(v));
     return true;
 }
 
@@ -1098,28 +1098,28 @@ template<typename T, typename... Args>
 T JObject<CTag>::call(const string_view &methodName, Args&&... args) const {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
-    return call_with_methodID<T>(oid_, classId(), nullptr, [this](string&& err){ setError(move(err));}, s.data(), methodName.data(), forward<Args>(args)...);
+    return call_with_methodID<T>(oid_, classId(), nullptr, [this](string&& err){ setError(std::move(err));}, s.data(), methodName.data(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename... Args>
 void JObject<CTag>::call(const string_view &methodName, Args&&... args) const {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
-    call_with_methodID<void>(oid_, classId(), nullptr, [this](string&& err){ setError(move(err));}, s.data(), methodName.data(), forward<Args>(args)...);
+    call_with_methodID<void>(oid_, classId(), nullptr, [this](string&& err){ setError(std::move(err));}, s.data(), methodName.data(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename T, typename... Args>
 T JObject<CTag>::callStatic(const string_view &name, Args&&... args) {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
-    return call_static_with_methodID<T>(classId(), nullptr, nullptr, s.data(), name.data(), forward<Args>(args)...);
+    return call_static_with_methodID<T>(classId(), nullptr, nullptr, s.data(), name.data(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename... Args>
 void JObject<CTag>::callStatic(const string_view &name, Args&&... args) {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
-    call_static_with_methodID<void>(classId(), nullptr, nullptr, s.data(), name.data(), forward<Args>(args)...);
+    call_static_with_methodID<void>(classId(), nullptr, nullptr, s.data(), name.data(), std::forward<Args>(args)...);
 }
 
 template<class CTag>
@@ -1140,7 +1140,7 @@ bool JObject<CTag>::set(string_view&& fieldName, T&& v) {
         if (detail::handle_exception())
             setError(string("Failed to set field '") + fieldName.data() + "' with signature '" + signature_of<T>().data() + "'.");
     });
-    detail::set_field<T>(oid_, classId(), &fid, fieldName.data(), forward<T>(v));
+    detail::set_field<T>(oid_, classId(), &fid, fieldName.data(), std::forward<T>(v));
     return true;
 }
 template<class CTag>
@@ -1153,7 +1153,7 @@ template<class CTag>
 template<typename T>
 bool JObject<CTag>::setStatic(string_view&& fieldName, T&& v) {
     jfieldID fid = nullptr;
-    detail::set_static_field<T>(classId(), &fid, fieldName.data(), forward<T>(v));
+    detail::set_static_field<T>(classId(), &fid, fieldName.data(), std::forward<T>(v));
     return true;
 }
 
@@ -1177,9 +1177,9 @@ void JObject<CTag>::Field<F, MayBeFTag, isStaticField>::set(F&& v)
         detail::handle_exception();
     });
     if (isStaticField)
-        detail::set_static_field<F>(getEnv(), cid_, id(), forward<F>(v));
+        detail::set_static_field<F>(getEnv(), cid_, id(), std::forward<F>(v));
     else
-        detail::set_field<F>(getEnv(), oid_, id(), forward<F>(v));
+        detail::set_field<F>(getEnv(), oid_, id(), std::forward<F>(v));
 }
 
 template<class CTag>
