@@ -61,7 +61,7 @@
     texture.call("getTransformMatrix", std::ref(mat4)); // use std::ref() if parameter should be modified by jni method
 ```
 
-若出参类型是 `JObject<...>` 或器子类, 则可不使用`std::ref()`，因为对象不会改变，可能只是某些fields被方法修改了，如
+若出参类型是 `JObject<...>` 或其子类, 则可不使用`std::ref()`，因为对象不会改变，可能只是某些fields被方法修改了，如
 
 ```
     MediaCodec::BufferInfo bi;
