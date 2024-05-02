@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2023 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2024 Wang Bin - wbsecg1@gmail.com
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -45,10 +45,11 @@ static jint jni_ver = JNI_VERSION_1_4;
 
 JavaVM* javaVM(JavaVM *vm, jint v) {
     static JavaVM *jvm_ = nullptr;
+    const auto old = jvm_;
     if (vm)
         jvm_ = vm;
     jni_ver = v;
-    return jvm_;
+    return old;
 }
 
 static void detach(void* = nullptr)
