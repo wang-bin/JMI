@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2023 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2024 Wang Bin - wbsecg1@gmail.com
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -167,7 +167,7 @@ public:
     operator jclass() const { return classId();}
     jobject id() const { return oid_; }
     explicit operator bool() const { return !!oid_;}
-    string error() const {return error_;}
+    const string& error() const {return error_;}
     JObject& reset(jobject obj = nullptr, JNIEnv *env = nullptr);
 
     template<typename... Args>
@@ -275,7 +275,7 @@ public:
     }
 private:
     static jclass classId(JNIEnv* env = nullptr);
-    JObject& setError(string&& s) const {
+    JObject& setError(const string& s) const {
         error_ = std::move(s);
         return *const_cast<JObject*>(this);
     }
@@ -980,8 +980,7 @@ JObject<CTag>& JObject<CTag>::reset(jobject obj, JNIEnv *env) {
         if (!env)
             return setError("Invalid JNIEnv");
     }
-    if (oid_)
-        env->DeleteGlobalRef(oid_);
+    env->DeleteGlobalRef(oid_); // can be null
     oid_ = nullptr;
     if (obj) {
         oid_ = env->NewGlobalRef(obj);
