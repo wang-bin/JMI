@@ -1125,7 +1125,7 @@ template<class CTag>
 template<typename T>
 T JObject<CTag>::get(string_view fieldName) const {
     jfieldID fid = nullptr;
-    auto checker = detail::call_on_exit([=, this]{
+    auto checker = detail::call_on_exit([fieldName, this]{
         if (detail::handle_exception()) // TODO: check fid
             setError(string("Failed to get field '") + fieldName.data() + "' with signature '" + signature_of<T>().data() + "'.");
     });
@@ -1135,7 +1135,7 @@ template<class CTag>
 template<typename T>
 bool JObject<CTag>::set(string_view fieldName, T&& v) {
     jfieldID fid = nullptr;
-    auto checker = detail::call_on_exit([=, this]{
+    auto checker = detail::call_on_exit([fieldName, this]{
         if (detail::handle_exception())
             setError(string("Failed to set field '") + fieldName.data() + "' with signature '" + signature_of<T>().data() + "'.");
     });
@@ -1226,7 +1226,7 @@ jclass JObject<CTag>::classId(JNIEnv* env) {
             if (!env)
                 return c;
         }
-        LocalRef cid = {env->FindClass(className().data()), env};
+        LocalRef cid(env->FindClass(className().data()), env);
         if (cid)
             c = static_cast<jclass>(env->NewGlobalRef(cid)); // cache per (c++/java)class class id
     }

@@ -19,7 +19,7 @@ jobs:
       matrix:
         arch: [armeabi-v7a, arm64-v8a]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v5
     - name: Build for armeabi-v7a
       run: |
         cmake -DCMAKE_SYSTEM_NAME=Android -DCMAKE_ANDROID_ARCH_ABI=${{ matrix.arch }} -DCMAKE_ANDROID_NDK=$ANDROID_NDK_LATEST_HOME -DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang -DCMAKE_ANDROID_STL_TYPE=c++_shared -DCMAKE_BUILD_TYPE=Release  -DCMAKE_VERBOSE_MAKEFILE=1 .
@@ -31,9 +31,9 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x64, amd64_x86]
-        std: [14, 17]
+        std: [14, 20]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v5
     - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: ilammy/msvc-dev-cmd@v1
       with:
@@ -51,7 +51,7 @@ jobs:
   AppleClang:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v5
     - name: Install dev tools
       run: |
         brew install openjdk
@@ -72,14 +72,20 @@ jobs:
         ctest -V
 
   GCC:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-${{ matrix.os_ver }}
     strategy:
       fail-fast: false
       matrix:
-        cc_ver: [9, 10]
-        std: [14, 17]
+        cc_ver: [10, 14]
+        std: [14, 20]
+        os_ver: [22.04, latest]
+        exclude:
+          - cc_ver: 14
+            os_ver: 22.04
+          - cc_ver: 10
+            os_ver: latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v5
     - name: Install dev tools
       run: sudo apt install openjdk-11-jdk-headless
     - name: Build
@@ -92,14 +98,20 @@ jobs:
         ctest -V
 
   Clang:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-${{ matrix.os_ver }}
     strategy:
       fail-fast: false
       matrix:
-        cc_ver: [10, 11, 12]
-        std: [14, 17]
+        cc_ver: [13, 18]
+        std: [14, 20]
+        os_ver: [22.04, latest]
+        exclude:
+          - cc_ver: 13
+            os_ver: latest
+          - cc_ver: 18
+            os_ver: 22.04
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v5
     - name: Install dev tools
       run: sudo apt install openjdk-11-jdk-headless
     - name: Build
