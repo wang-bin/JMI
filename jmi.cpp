@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2024 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2026 Wang Bin - wbsecg1@gmail.com
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -311,7 +311,8 @@ jarray make_jarray(JNIEnv *env, const jdouble&, size_t size) {
 }
 template<>
 jarray make_jarray(JNIEnv *env, const string&, size_t size) {
-    return env->NewObjectArray((jsize)size, env->FindClass("java/lang/String"), nullptr);
+    const LocalRef c(env->FindClass("java/lang/String"), env);
+    return env->NewObjectArray((jsize)size, c, nullptr);
 }
 template<>
 jarray make_jarray(JNIEnv *env, const char&, size_t size) {
