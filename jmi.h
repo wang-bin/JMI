@@ -1,6 +1,6 @@
 /*
  * JMI: JNI Modern Interface
- * Copyright (C) 2016-2024 Wang Bin - wbsecg1@gmail.com
+ * Copyright (C) 2016-2026 Wang Bin - wbsecg1@gmail.com
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -816,7 +816,7 @@ namespace detail {
         auto checker = call_on_exit([=]{
             if (handle_exception(env)) {
                 if (err_cb)
-                    err_cb(string("Failed to call static method '") + name + "'' with signature '" + signature + "'.");
+                    err_cb(string("Failed to call static method '") + name + "' with signature '" + signature + "'.");
             }
         });
         jmethodID mid = nullptr;
@@ -1053,7 +1053,7 @@ void JObject<CTag>::callStatic(Args&&... args) {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
     static jmethodID mid = nullptr;
-    return call_static_with_methodID<void>(classId(), &mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
+    call_static_with_methodID<void>(classId(), &mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 
 template<class CTag>
@@ -1160,7 +1160,7 @@ template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
 F JObject<CTag>::Field<F, MayBeFTag, isStaticField>::get() const
 {
-    auto checker = detail::call_on_exit([=]{
+    auto checker = detail::call_on_exit([]{
         detail::handle_exception();
     });
     if (isStaticField)
@@ -1172,7 +1172,7 @@ template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
 void JObject<CTag>::Field<F, MayBeFTag, isStaticField>::set(F&& v)
 {
-    auto checker = detail::call_on_exit([=]{
+    auto checker = detail::call_on_exit([]{
         detail::handle_exception();
     });
     if (isStaticField)
