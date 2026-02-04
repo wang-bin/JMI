@@ -71,7 +71,7 @@ JNIEnv *getEnv() {
     }
     JNIEnv* env = nullptr;
     int status = javaVM()->GetEnv((void**)&env, jni_ver);
-    if (JNI_OK == status)
+    if (status == JNI_OK)
         return env;
     if (status != JNI_EDETACHED) {
         if (status == JNI_EVERSION)
@@ -156,7 +156,7 @@ jobject application(JNIEnv* env)
 } // namespace android
 
 namespace detail {
-bool handle_exception(JNIEnv* env) { //'static' function 'handle_exception' declared in header file should be declared 'static inline' [-Wunneeded-internal-declaration]
+bool handle_exception(JNIEnv* env) noexcept {
     if (!env)
         env = getEnv();
     if (!env->ExceptionCheck())
@@ -371,7 +371,8 @@ template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const string &elm) {
     for (size_t i = 0; i < n; ++i) {
         const string& s = *(&elm + i);
-        set_jarray(env, arr, position + i, 1, (jobject)from_string(s, env));
+        LocalRef js(from_string(s, env), env);
+        set_jarray(env, arr, position + i, 1, (jobject)js);
     }
 }
 

@@ -104,8 +104,8 @@ public:
 
     LocalRef(const LocalRef&) = delete;
     LocalRef& operator=(const LocalRef&) = delete;
-    LocalRef(LocalRef&& that) : j_(that.j_), env_(that.env_) { that.j_ = nullptr;}  // total ref obj is 1
-    LocalRef& operator=(LocalRef&& that) {  // total ref obj is 2, or delete 1 here
+    LocalRef(LocalRef&& that) noexcept : j_(that.j_), env_(that.env_) { that.j_ = nullptr;}  // total ref obj is 1
+    LocalRef& operator=(LocalRef&& that) noexcept {  // total ref obj is 2, or delete 1 here
         swap(j_, that.j_);
         swap(env_, that.env_);
         return *this;
@@ -275,8 +275,12 @@ public:
     }
 private:
     static jclass classId(JNIEnv* env = nullptr);
-    JObject& setError(const string& s) const {
+    JObject& setError(const string& s) const noexcept {
         error_ = s;
+        return *const_cast<JObject*>(this);
+    }
+    JObject& setError(string&& s) const noexcept {
+        error_ = std::move(s);
         return *const_cast<JObject*>(this);
     }
 
@@ -440,7 +444,7 @@ inline namespace impl {
     }
 
     template<size_t N1, size_t N2>
-    inline constexpr bool operator==(const array<char, N1> a, const char (&s)[N2]) {
+    constexpr bool operator==(const array<char, N1> a, const char (&s)[N2]) noexcept {
         return N1 == N2 && equal(a.begin(), a.end(), begin(s));
     }
 #else
@@ -557,7 +561,7 @@ CONSTEXPR17 auto signature_of(R (*)(Args...)) {
 }
 
 namespace detail {
-    bool handle_exception(JNIEnv* env = nullptr);
+    bool handle_exception(JNIEnv* env = nullptr) noexcept;
 
     template<class F>
     class scope_exit_handler {
@@ -1002,7 +1006,7 @@ bool JObject<CTag>::create(Args&&... args) {
             return false;
         }
     }
-    const jclass cid = classId();
+    const jclass cid = classId(env);
     if (!cid) {
         setError("Failed to find class '" + to_string(className()) + "'");
         return false;
