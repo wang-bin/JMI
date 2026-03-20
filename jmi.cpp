@@ -156,14 +156,26 @@ jobject application(JNIEnv* env)
 } // namespace android
 
 namespace detail {
-bool handle_exception(JNIEnv* env) noexcept {
+string handle_exception(string&& msg, JNIEnv* env) noexcept {
     if (!env)
         env = getEnv();
     if (!env->ExceptionCheck())
-        return false;
-    env->ExceptionDescribe();
+        return {};
+    auto ex = env->ExceptionOccurred();
+    env->ExceptionDescribe(); // stderr
     env->ExceptionClear();
-    return true;
+
+    class Throwable final: public JObject<Throwable> {
+    public:
+        static constexpr auto name() { return JMISTR("java/lang/Throwable");}
+        Throwable(jthrowable obj = nullptr, bool del_localref = true) : JObject(obj, del_localref) {}
+        string getMessage() const {
+            static const char* kName = __func__; // static required by vc (C2326)
+            struct MT : MethodTag { static const char* name() {return kName;}};
+            return call<string, MT>();
+        }
+    };
+    return std::move(msg) + " Exception: " + Throwable(ex).getMessage();
 }
 
 template<>
