@@ -39,8 +39,8 @@ using string_view = std::string;
 namespace jmi {
 using namespace std;
 /*************************** JMI Public APIs Begin ***************************/
-#define JMI_MAJOR 0
-#define JMI_MINOR 1
+#define JMI_MAJOR 1
+#define JMI_MINOR 0
 #define JMI_MICRO 0
 
 #define JMI_VERSION_STR JMI_STRINGIFY(JMI_MAJOR) "." JMI_STRINGIFY(JMI_MINOR) "." JMI_STRINGIFY(JMI_MICRO)
