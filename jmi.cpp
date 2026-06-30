@@ -124,8 +124,11 @@ string to_string(jstring s, JNIEnv* env)
 {
     if (!s)
         return {};
-    if (!env)
+    if (!env) {
         env = getEnv();
+        if (!env)
+            return {};
+    }
     const char* cs = env->GetStringUTFChars(s, nullptr);
     if (!cs)
         return {};
@@ -137,16 +140,22 @@ string to_string(jstring s, JNIEnv* env)
 
 jstring from_string(const string &s, JNIEnv* env)
 {
-    if (!env)
+    if (!env) {
         env = getEnv();
+        if (!env)
+            return nullptr;
+    }
     return env->NewStringUTF(s.data());
 }
 
 namespace android {
 jobject application(JNIEnv* env)
 {
-    if (!env)
+    if (!env) {
         env = jmi::getEnv();
+        if (!env)
+            return nullptr;
+    }
     const LocalRef c_at = {env->FindClass("android/app/ActivityThread"), env};
     static jmethodID m_cat = env->GetStaticMethodID(c_at, "currentActivityThread", "()Landroid/app/ActivityThread;");
     static jmethodID m_ga = env->GetMethodID(c_at, "getApplication", "()Landroid/app/Application;");
