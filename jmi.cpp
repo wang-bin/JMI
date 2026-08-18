@@ -46,9 +46,10 @@ static jint jni_ver = JNI_VERSION_1_4;
 JavaVM* javaVM(JavaVM *vm, jint v) {
     static JavaVM *jvm_ = nullptr;
     const auto old = jvm_;
-    if (vm)
+    if (vm) {
         jvm_ = vm;
-    jni_ver = v;
+        jni_ver = v;
+    }
     return old;
 }
 
