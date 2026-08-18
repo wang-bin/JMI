@@ -537,11 +537,14 @@ CONSTEXPR17 auto signature_of() {
 template<typename T, detail::if_cstring<T> = true>
 constexpr auto signature_of() { return signature<char*>::value;}
 
-// jobject is a pointer typedef but JNI object parameters use Ljava/lang/Object;
-template<typename T, detail::if_same<T, jobject> = true>
+template<typename T, detail::if_same<T, jstring> = true>
+constexpr auto signature_of() { return signature<string>::value;}
+
+// jobject subtypes without a more specific signature fall back to Object.
+template<typename T, typename enable_if<detail::is_jobject<T>::value && !detail::is_jarray<T>::value && !is_same<T, jstring>::value, bool>::type = true>
 constexpr auto signature_of() { return to_array("Ljava/lang/Object;");}
 
-template<typename T, detail::if_pointer<T> = true, detail::if_not_jarray<T> = true, detail::if_not_cstring<T> = true>
+template<typename T, detail::if_pointer<T> = true, detail::if_not_jobject<T> = true, detail::if_not_jarray<T> = true, detail::if_not_cstring<T> = true>
 constexpr auto signature_of() { return signature<jlong>::value;}
 
 template<typename T, detail::if_pointer<T> = true, detail::if_jarray<T> = true>
@@ -640,12 +643,13 @@ namespace detail {
     using if_enum = typename enable_if<is_enum<T>::value, bool>::type;
     template<typename T>
     using if_not_enum = typename enable_if<!is_enum<T>::value, bool>::type;
-    template<typename T, if_not_enum<T> = true, if_not_JObject<T> = true>
+    template<typename T, if_not_enum<T> = true, if_not_JObject<T> = true, if_not_jobject<T> = true>
     jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr);
     template<typename T, if_enum<T> = true, if_not_JObject<T> = true>
     jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr) {return to_jvalue((jint)obj, env);}
-    template<typename T> jvalue to_jvalue(T *obj, JNIEnv* env) { return to_jvalue((jlong)obj, env); } // not jobject
-    inline jvalue to_jvalue(jobject obj, JNIEnv* = nullptr) {
+    template<typename T, detail::if_not_jobject<T> = true> jvalue to_jvalue(T *obj, JNIEnv* env) { return to_jvalue((jlong)obj, env); }
+    template<typename T, detail::if_jobject<T> = true>
+    inline jvalue to_jvalue(T obj, JNIEnv* = nullptr) {
         jvalue v;
         v.l = obj;
         return v;

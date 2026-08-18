@@ -7,6 +7,33 @@
 using namespace std;
 using namespace jmi;
 
+constexpr bool EqualsSig(const array<char, 19>& a, const array<char, 19>& b) {
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i] != b[i])
+            return false;
+    }
+    return true;
+}
+
+constexpr bool EqualsSig(const array<char, 19>& a, const char (&b)[19]) {
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i] != b[i])
+            return false;
+    }
+    return true;
+}
+
+constexpr bool EqualsSig(const array<char, 3>& a, const char (&b)[3]) {
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i] != b[i])
+            return false;
+    }
+    return true;
+}
+
+static_assert(EqualsSig(jmi::signature_of<jobject>(), "Ljava/lang/Object;"));
+static_assert(EqualsSig(jmi::signature_of<jstring>(), "Ljava/lang/String;"));
+static_assert(EqualsSig(jmi::signature_of<jintArray>(), "[I"));
 extern "C" jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 {
     JNIEnv* env = nullptr;

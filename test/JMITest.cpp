@@ -212,6 +212,22 @@ void JMITestUncached::getIntArrayAsParam(std::array<jint, 2>& v) const
 void test()
 {
     cout << "JMI Test on thread: " << this_thread::get_id() << endl;
+    auto env = getEnv();
+    TEST(env);
+    jstring raw_str = env->NewStringUTF("jmi");
+    TEST(raw_str);
+    auto jv_str = jmi::detail::to_jvalue(raw_str, env);
+    TEST(jv_str.l == raw_str);
+    env->DeleteLocalRef(raw_str);
+    jintArray raw_arr = env->NewIntArray(2);
+    TEST(raw_arr);
+    auto jv_arr = jmi::detail::to_jvalue(raw_arr, env);
+    TEST(jv_arr.l == raw_arr);
+    env->DeleteLocalRef(raw_arr);
+    LocalRef raw_obj = {env->FindClass("java/lang/Object"), env};
+    TEST(raw_obj);
+    auto jv_obj = jmi::detail::to_jvalue((jobject)raw_obj, env);
+    TEST(jv_obj.l == (jobject)raw_obj);
 	const jbyte cs[] = {'1', '2', '3'};
     std::array<jbyte, 3> cxxa{'a', 'b', 'c'};
 	//cout << zconcat('1', '2', '3').size() << endl;
