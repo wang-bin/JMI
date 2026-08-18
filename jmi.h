@@ -606,10 +606,15 @@ namespace detail {
     jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref = false);
     template<typename T, size_t N>
     jarray to_jarray(JNIEnv* env, const T(&c)[N], bool is_ref = false) {
+        if (N == 0)
+            return to_jarray(env, T{}, 0, is_ref);
         return to_jarray(env, c[0], N, is_ref);
     }
     template<typename C> // c++ container (vector, valarray, array) to jarray. no if_jarray_cpp check (requires overload for both vector like and array like containers) because it's checked by to_jvalue
     jarray to_jarray(JNIEnv* env, const C &c, bool is_ref = false) {
+        using T = remove_cvref_t<decltype(declval<const C&>()[0])>;
+        if (c.size() == 0)
+            return to_jarray(env, T{}, 0, is_ref);
         return to_jarray(env, c[0], c.size(), is_ref);
     }
     // env can be null for base types
@@ -664,7 +669,11 @@ namespace detail {
         t.reset(v.l, env); // local ref will be deleted in caller set_ref_from_jvalue()
     }
     template<template<typename,class...> class C, typename T, class... A, if_jarray_cpp<C<T, A...>>  = true> // if_jarray_cpp: exclude string. jarray works too (copy chars)
-    void from_jvalue(JNIEnv* env, const jvalue& v, C<T, A...> &t) { from_jarray(env, v, &t[0], t.size()); }
+    void from_jvalue(JNIEnv* env, const jvalue& v, C<T, A...> &t) {
+        if (t.size() == 0)
+            return;
+        from_jarray(env, v, &t[0], t.size());
+    }
     template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, array<T, N> &t) { from_jarray(env, v, t.data(), N); }
     //template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { from_jarray(env, v, t, N); }
 
