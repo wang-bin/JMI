@@ -1,6 +1,7 @@
 /*
  * JMI: JNI Modern Interface
  * Copyright (C) 2016-2026 Wang Bin - wbsecg1@gmail.com
+ * AI participated
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -65,6 +66,7 @@ struct MethodTag {}; // used by call() and callStatic(). subclasses must define 
 struct FieldTag {}; // subclasses must define static const char* name() or static constexpr const char*();
 
 namespace detail {
+struct JavaLangClassTag;
 // using var template requires c++14
 template<class T>
 struct is_jobject : integral_constant<bool, is_base_of<typename remove_pointer<jobject>::type, typename remove_pointer<T>::type>::value> {};
@@ -172,6 +174,12 @@ public:
 
     template<typename... Args>
     bool create(Args&&... args);
+
+    string toString() const;
+    auto getClass() const -> JObject<detail::JavaLangClassTag>;
+    jint hashCode() const;
+    template<class OtherTag>
+    bool equals(const JObject<OtherTag>& other) const;
 
     /* with MethodTag we can avoid calling GetMethodID() in every call()
         struct MyMethod : jmi::MethodTag { static const char* name() { return "myMethod";} };
@@ -475,6 +483,12 @@ inline namespace impl {
 #endif
 } // namespace impl
 
+namespace detail {
+struct JavaLangClassTag : ClassTag {
+    static constexpr auto name() { return JMISTR("java/lang/Class"); }
+};
+} // namespace detail
+
 /*************************** Below is JMI implementation and internal APIs***************************/
 
 //signature_of_args<decltype(Args)...>::value, template<typename ...A> struct signature_of_args?
@@ -522,6 +536,10 @@ CONSTEXPR17 auto signature_of() {
 
 template<typename T, detail::if_cstring<T> = true>
 constexpr auto signature_of() { return signature<char*>::value;}
+
+// jobject is a pointer typedef but JNI object parameters use Ljava/lang/Object;
+template<typename T, detail::if_same<T, jobject> = true>
+constexpr auto signature_of() { return to_array("Ljava/lang/Object;");}
 
 template<typename T, detail::if_pointer<T> = true, detail::if_not_jarray<T> = true, detail::if_not_cstring<T> = true>
 constexpr auto signature_of() { return signature<jlong>::value;}
@@ -626,7 +644,12 @@ namespace detail {
     jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr);
     template<typename T, if_enum<T> = true, if_not_JObject<T> = true>
     jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr) {return to_jvalue((jint)obj, env);}
-    template<typename T> jvalue to_jvalue(T *obj, JNIEnv* env) { return to_jvalue((jlong)obj, env); } // works for jobject
+    template<typename T> jvalue to_jvalue(T *obj, JNIEnv* env) { return to_jvalue((jlong)obj, env); } // not jobject
+    inline jvalue to_jvalue(jobject obj, JNIEnv* = nullptr) {
+        jvalue v;
+        v.l = obj;
+        return v;
+    }
     jvalue to_jvalue(const char* obj, JNIEnv* env);// { return to_jvalue(string(obj)); }
     template<typename T, if_not_enum<T> = true, if_JObject<T> = true>
     jvalue to_jvalue(const T &obj, JNIEnv* env = nullptr) { return to_jvalue(jobject(obj), env);}
@@ -1032,6 +1055,31 @@ bool JObject<CTag>::create(Args&&... args) {
     }
     reset(oid, env);
     return !!oid_;
+}
+
+template<class CTag>
+string JObject<CTag>::toString() const {
+    struct ToString : MethodTag { static const char* name() { return "toString"; }};
+    return call<string, ToString>();
+}
+
+template<class CTag>
+auto JObject<CTag>::getClass() const -> JObject<detail::JavaLangClassTag> {
+    struct GetClass : MethodTag { static const char* name() { return "getClass"; }};
+    return call<JObject<detail::JavaLangClassTag>, GetClass>();
+}
+
+template<class CTag>
+jint JObject<CTag>::hashCode() const {
+    struct HashCode : MethodTag { static const char* name() { return "hashCode"; }};
+    return call<jint, HashCode>();
+}
+
+template<class CTag>
+template<class OtherTag>
+bool JObject<CTag>::equals(const JObject<OtherTag>& other) const {
+    struct Equals : MethodTag { static const char* name() { return "equals"; }};
+    return call<jboolean, Equals>(other.id());
 }
 
 template<class CTag>
