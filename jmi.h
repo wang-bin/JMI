@@ -811,22 +811,27 @@ namespace detail {
         return call_static_method<T>(env, cid, mid, jargs);
     }
 
-    template<typename T, typename... Args>
-    T call_with_methodID(jobject oid, jclass cid, jmethodID* pmid, function<void(string&& err)>&& err_cb, const char* signature, const char* name, Args&&... args) {
-        if (err_cb)
-            err_cb(string());
+    // std::function would heap-allocate the per-call lambda; nullptr is a no-op.
+    template<typename F, typename enable_if<!is_null_pointer<typename decay<F>::type>::value, int>::type = 0>
+    void invoke_err_cb(F&& f, string&& s) {
+        std::forward<F>(f)(std::move(s));
+    }
+    inline void invoke_err_cb(nullptr_t, string&&) {}
+
+    template<typename T, typename ErrCb, typename... Args>
+    T call_with_methodID(jobject oid, jclass cid, jmethodID* pmid, ErrCb&& err_cb, const char* signature, const char* name, Args&&... args) {
+        invoke_err_cb(err_cb, string());
         if (!cid)
             return T();
         if (!oid) {
-            if (err_cb)
-                err_cb("Invalid object instance");
+            invoke_err_cb(err_cb, string("Invalid object instance"));
             return T();
         }
         JNIEnv *env = getEnv();
-        const auto checker = call_on_exit([=]{
+        const auto checker = call_on_exit([=, err_cb = std::forward<ErrCb>(err_cb)]{
             auto ex = handle_exception(string("Failed to call method '") + name + "' with signature '" + signature + "'.", env);
-            if (!ex.empty() && err_cb)
-                err_cb(std::move(ex));
+            if (!ex.empty())
+                invoke_err_cb(err_cb, std::move(ex));
         });
         jmethodID mid = nullptr;
         if (pmid)
@@ -841,17 +846,16 @@ namespace detail {
         return call_method_set_ref<T>(env, oid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(std::forward<Args>(args), env)...}).begin()), std::forward<Args>(args)...);
     }
 
-    template<typename T, typename... Args>
-    T call_static_with_methodID(jclass cid, jmethodID* pmid, function<void(string&& err)>&& err_cb, const char* signature, const char* name, Args&&... args) {
-        if (err_cb)
-            err_cb(string());
+    template<typename T, typename ErrCb, typename... Args>
+    T call_static_with_methodID(jclass cid, jmethodID* pmid, ErrCb&& err_cb, const char* signature, const char* name, Args&&... args) {
+        invoke_err_cb(err_cb, string());
         if (!cid)
             return T();
         JNIEnv *env = getEnv();
-        auto checker = call_on_exit([=]{
+        auto checker = call_on_exit([=, err_cb = std::forward<ErrCb>(err_cb)]{
             auto ex = handle_exception(string("Failed to call static method '") + name + "' with signature '" + signature + "'.", env);
-            if (!ex.empty() && err_cb)
-                err_cb(std::move(ex));
+            if (!ex.empty())
+                invoke_err_cb(err_cb, std::move(ex));
         });
         jmethodID mid = nullptr;
         if (pmid)
