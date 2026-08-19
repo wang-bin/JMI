@@ -127,6 +127,9 @@ private:
     JNIEnv* env_ = nullptr;
 };
 
+// The local reference is owned by s and deleted when the temporary is destroyed.
+string to_string(LocalRef&& s, JNIEnv* env = nullptr);
+
 // object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
 template<class CTag>
 class JObject : public ClassTag

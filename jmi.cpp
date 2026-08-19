@@ -122,24 +122,38 @@ JNIEnv *getEnv() {
     return env;
 }
 
+static string to_string_impl(jstring s, JNIEnv* env)
+{
+    if (env->ExceptionCheck() || !s)
+        return {};
+    const char* cs = env->GetStringUTFChars(s, nullptr);
+    if (!cs)
+        return {};
+    string ss(cs);
+    env->ReleaseStringUTFChars(s, cs);
+    return ss;
+}
+
 string to_string(jstring s, JNIEnv* env)
 {
-    if (!s)
-        return {};
     if (!env) {
         env = getEnv();
         if (!env)
             return {};
     }
-    const char* cs = env->GetStringUTFChars(s, nullptr);
-    if (!cs) {
-        env->DeleteLocalRef(s);
-        return {};
-    }
-    string ss(cs);
-    env->ReleaseStringUTFChars(s, cs);
+    const auto result = to_string_impl(s, env);
     env->DeleteLocalRef(s);
-    return ss;
+    return result;
+}
+
+string to_string(LocalRef&& s, JNIEnv* env)
+{
+    if (!env) {
+        env = getEnv();
+        if (!env)
+            return {};
+    }
+    return to_string_impl(s.get<jstring>(), env);
 }
 
 jstring from_string(const string &s, JNIEnv* env)
@@ -233,12 +247,7 @@ void call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) 
 }
 template<>
 string call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
-    const auto result = static_cast<jstring>(call_method<jobject>(env, obj_id, methodId, args));
-    if (env->ExceptionCheck()) {
-        env->DeleteLocalRef(result);
-        return {};
-    }
-    return to_string(result, env);
+    return to_string(LocalRef{call_method<jobject>(env, obj_id, methodId, args), env}, env);
 }
 
 template<>
@@ -283,12 +292,7 @@ void call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue 
 }
 template<>
 string call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
-    const auto result = static_cast<jstring>(call_static_method<jobject>(env, classId, methodId, args));
-    if (env->ExceptionCheck()) {
-        env->DeleteLocalRef(result);
-        return {};
-    }
-    return to_string(result, env);
+    return to_string(LocalRef{call_static_method<jobject>(env, classId, methodId, args), env}, env);
 }
 
 // designated initializer jvalue{.b = obj} requires c++20 or gnu
@@ -497,12 +501,7 @@ jdouble get_field(JNIEnv* env, jobject oid, jfieldID fid) {
 }
 template<>
 string get_field(JNIEnv* env, jobject oid, jfieldID fid) {
-    const auto result = static_cast<jstring>(get_field<jobject>(env, oid, fid));
-    if (env->ExceptionCheck()) {
-        env->DeleteLocalRef(result);
-        return {};
-    }
-    return to_string(result, env);
+    return to_string(LocalRef{get_field<jobject>(env, oid, fid), env}, env);
 }
 
 template<>
@@ -586,12 +585,7 @@ jdouble get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
 }
 template<>
 string get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
-    const auto result = static_cast<jstring>(get_static_field<jobject>(env, cid, fid));
-    if (env->ExceptionCheck()) {
-        env->DeleteLocalRef(result);
-        return {};
-    }
-    return to_string(result, env);
+    return to_string(LocalRef{get_static_field<jobject>(env, cid, fid), env}, env);
 }
 
 template<>
