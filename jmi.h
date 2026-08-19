@@ -81,6 +81,8 @@ using if_ClassTag = typename enable_if<is_base_of<ClassTag, Tag>::value, bool>::
 template<class Tag>
 using if_MethodTag = typename enable_if<is_base_of<MethodTag, Tag>::value, bool>::type;
 template<class Tag>
+using if_not_MethodTag = typename enable_if<!is_base_of<MethodTag, Tag>::value, bool>::type;
+template<class Tag>
 using if_FieldTag = typename enable_if<is_base_of<FieldTag, Tag>::value, bool>::type;
 template<class T> struct is_JObject : is_base_of<ClassTag, T>::type {}; // TODO: is_detected<signature>
 template<class T>
@@ -209,11 +211,11 @@ public:
     static bool setStatic(T&& v);
 
     // the following call()/callStatic() will always invoke GetMethodID()/GetStaticMethodID()
-    template<typename T, typename... Args>
-    T call(const string_view& methodName, Args&&... args) const; // ambiguous methodName and arg?
+    template<typename T, typename... Args, detail::if_not_MethodTag<T> = true>
+    T call(const string_view& methodName, Args&&... args) const; // if_not_MethodTag: call<Set>(cstr) must use MethodTag overload
     template<typename... Args>
     void call(const string_view& methodName, Args&&... args) const;
-    template<typename T, typename... Args>
+    template<typename T, typename... Args, detail::if_not_MethodTag<T> = true>
     static T callStatic(const string_view& name, Args&&... args);
     template<typename... Args>
     static void callStatic(const string_view& name, Args&&... args);
@@ -1155,7 +1157,7 @@ bool JObject<CTag>::setStatic(T&& v) {
 
 
 template<class CTag>
-template<typename T, typename... Args>
+template<typename T, typename... Args, detail::if_not_MethodTag<T>>
 T JObject<CTag>::call(const string_view &methodName, Args&&... args) const {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
@@ -1169,7 +1171,7 @@ void JObject<CTag>::call(const string_view &methodName, Args&&... args) const {
     call_with_methodID<void>(oid_, classId(), nullptr, [this](string&& err){ setError(std::move(err));}, s.data(), methodName.data(), std::forward<Args>(args)...);
 }
 template<class CTag>
-template<typename T, typename... Args>
+template<typename T, typename... Args, detail::if_not_MethodTag<T>>
 T JObject<CTag>::callStatic(const string_view &name, Args&&... args) {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
