@@ -329,11 +329,10 @@ struct is_jarray_cpp : integral_constant<bool, (is_array_like<T>::value || is_ar
     && !is_same<typename decay<T>::type, char*>::value
     && !is_same<typename decay<T>::type, const char*>::value> {};
 
-template<class T, typename = void>
-struct is_ref_wrap :false_type{};
-
 template<class T>
-struct is_ref_wrap<T, decltype(void(!declval<is_same<reference_wrapper<typename T::type>, remove_cvref_t<T>>>()))>: true_type{};
+struct is_ref_wrap : false_type {};
+template<class T>
+struct is_ref_wrap<reference_wrapper<T>> : true_type {};
 
 template<typename T>
 using if_jarray_cpp = typename enable_if<is_jarray_cpp<T>::value, bool>::type;

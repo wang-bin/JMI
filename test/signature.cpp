@@ -25,6 +25,8 @@ constexpr bool CstrEq(const array<char, N>& a, const char* b) {
 static_assert(CstrEq(jmi::signature_of<jobject>(), "Ljava/lang/Object;"), "");
 static_assert(CstrEq(jmi::signature_of<jstring>(), "Ljava/lang/String;"), "");
 static_assert(CstrEq(jmi::signature_of<jintArray>(), "[I"), "");
+static_assert(jmi::detail::is_ref_wrap<reference_wrapper<int>>::value, "");
+static_assert(!jmi::detail::is_ref_wrap<decay<int>>::value, "");
 extern "C" jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 {
     JNIEnv* env = nullptr;
