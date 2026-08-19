@@ -1027,14 +1027,17 @@ CONSTEXPR17 auto JObject<CTag>::signature()
 
 template<class CTag>
 JObject<CTag>& JObject<CTag>::reset(jobject obj, JNIEnv *env) {
-    if (oid_ == obj)
+    if (oid_ == obj) // same handle, including both null
         return *this;
-    error_.clear();
     if (!env) {
         env = getEnv();
         if (!env)
             return setError("Invalid JNIEnv");
     }
+    // Local and global refs to the same Java object have different handle values.
+    if (oid_ && obj && env->IsSameObject(oid_, obj))
+        return *this;
+    error_.clear();
     env->DeleteGlobalRef(oid_); // can be null
     oid_ = nullptr;
     if (obj) {
