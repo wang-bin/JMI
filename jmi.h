@@ -707,17 +707,18 @@ namespace detail {
         static const bool value = !is_arithmetic<T>::value && !is_pointer<T>::value && !is_JObject<T>::value;
     };
     template<typename T>
-    void set_ref_from_jvalue(JNIEnv* env, jvalue* jargs, T) {
+    void set_ref_from_jvalue(JNIEnv* env, jvalue* jargs, T, bool) {
         using Tn = typename remove_reference<T>::type;
         if (has_local_ref<Tn>::value)
             env->DeleteLocalRef(jargs->l);
     }
-    static inline void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, const char*) {
+    static inline void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, const char*, bool) {
         env->DeleteLocalRef(jargs->l);
     }
     template<typename T>
-    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<T> ref) {  // do nothing in from_jvalue for const T
-        from_jvalue(env, *jargs, ref.get());
+    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<T> ref, bool copy_back) {  // do nothing in from_jvalue for const T
+        if (copy_back)
+            from_jvalue(env, *jargs, ref.get());
         using Tn = typename remove_reference<T>::type;
         if (has_local_ref<Tn>::value)
             env->DeleteLocalRef(jargs->l);
@@ -730,27 +731,30 @@ namespace detail {
         env->DeleteLocalRef(a);
     }
     template<template<typename,class...> class C, typename T, class... A, if_jarray_cpp<C<T, A...>>  = true> // if_jarray_cpp: exclude string, jarray works (copy chars)
-    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<C<T, A...>> ref) {
-        from_jvalue(env, *jargs, ref.get());
+    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<C<T, A...>> ref, bool copy_back) {
+        if (copy_back)
+            from_jvalue(env, *jargs, ref.get());
         using Tn = typename remove_reference<T>::type;
-        delete_array_local_ref(env, static_cast<jarray>(jargs->l), ref.get().size(), has_local_ref<Tn>::value);
+        delete_array_local_ref(env, static_cast<jarray>(jargs->l), ref.get().size(), copy_back && has_local_ref<Tn>::value);
     }
     template<typename T, size_t N>
-    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<T[N]> ref) {
-        from_jvalue(env, *jargs, ref.get(), N); // assume only T* and T[N]
-        delete_array_local_ref(env, static_cast<jarray>(jargs->l), N, has_local_ref<T>::value);
+    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<T[N]> ref, bool copy_back) {
+        if (copy_back)
+            from_jvalue(env, *jargs, ref.get(), N); // assume only T* and T[N]
+        delete_array_local_ref(env, static_cast<jarray>(jargs->l), N, copy_back && has_local_ref<T>::value);
     }
     template<typename T, size_t N>
-    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<array<T, N>> ref) {
-        from_jvalue(env, *jargs, &ref.get()[0], N); // assume only T* and T[N]
-        delete_array_local_ref(env, static_cast<jarray>(jargs->l), N, has_local_ref<T>::value);
+    void set_ref_from_jvalue(JNIEnv* env, jvalue *jargs, reference_wrapper<array<T, N>> ref, bool copy_back) {
+        if (copy_back)
+            from_jvalue(env, *jargs, &ref.get()[0], N); // assume only T* and T[N]
+        delete_array_local_ref(env, static_cast<jarray>(jargs->l), N, copy_back && has_local_ref<T>::value);
     }
 
-    static inline void ref_args_from_jvalues(JNIEnv*, jvalue*) {}
+    static inline void ref_args_from_jvalues(JNIEnv*, jvalue*, bool) {}
     template<typename Arg, typename... Args>
-    void ref_args_from_jvalues(JNIEnv* env, jvalue *jargs, Arg&& arg, Args&&... args) {
-        set_ref_from_jvalue(env, jargs, std::forward<Arg>(arg));
-        ref_args_from_jvalues(env, jargs + 1, std::forward<Args>(args)...);
+    void ref_args_from_jvalues(JNIEnv* env, jvalue *jargs, bool copy_back, Arg&& arg, Args&&... args) {
+        set_ref_from_jvalue(env, jargs, std::forward<Arg>(arg), copy_back);
+        ref_args_from_jvalues(env, jargs + 1, copy_back, std::forward<Args>(args)...);
     }
 
     template<typename T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
@@ -779,7 +783,9 @@ namespace detail {
     template<typename T, typename... Args>
     T call_method_set_ref(JNIEnv *env, jobject oid, jmethodID mid, jvalue *jargs, Args&&... args) {
         auto setter = call_on_exit([=]{
-            ref_args_from_jvalues(env, jargs, args...);
+            // With a pending exception, only local-reference cleanup is safe; do not copy back output arguments.
+            const auto copy_back = !env->ExceptionCheck();
+            ref_args_from_jvalues(env, jargs, copy_back, args...);
         });
        return call_method<T>(env, oid, mid, jargs);
     }
@@ -809,7 +815,9 @@ namespace detail {
     template<typename T, typename... Args>
     T call_static_method_set_ref(JNIEnv *env, jclass cid, jmethodID mid, jvalue *jargs, Args&&... args) {
         auto setter = call_on_exit([=]{ // std::forward?
-            ref_args_from_jvalues(env, jargs, args...);
+            // With a pending exception, only local-reference cleanup is safe; do not copy back output arguments.
+            const auto copy_back = !env->ExceptionCheck();
+            ref_args_from_jvalues(env, jargs, copy_back, args...);
         });
         return call_static_method<T>(env, cid, mid, jargs);
     }
