@@ -233,7 +233,12 @@ void call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) 
 }
 template<>
 string call_method(JNIEnv *env, jobject obj_id, jmethodID methodId, jvalue *args) {
-    return to_string(static_cast<jstring>(call_method<jobject>(env, obj_id, methodId, args)), env);
+    const auto result = static_cast<jstring>(call_method<jobject>(env, obj_id, methodId, args));
+    if (env->ExceptionCheck()) {
+        env->DeleteLocalRef(result);
+        return {};
+    }
+    return to_string(result, env);
 }
 
 template<>
@@ -278,7 +283,12 @@ void call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue 
 }
 template<>
 string call_static_method(JNIEnv *env, jclass classId, jmethodID methodId, jvalue *args) {
-    return to_string(static_cast<jstring>(call_static_method<jobject>(env, classId, methodId, args)), env);
+    const auto result = static_cast<jstring>(call_static_method<jobject>(env, classId, methodId, args));
+    if (env->ExceptionCheck()) {
+        env->DeleteLocalRef(result);
+        return {};
+    }
+    return to_string(result, env);
 }
 
 // designated initializer jvalue{.b = obj} requires c++20 or gnu
@@ -487,7 +497,12 @@ jdouble get_field(JNIEnv* env, jobject oid, jfieldID fid) {
 }
 template<>
 string get_field(JNIEnv* env, jobject oid, jfieldID fid) {
-    return to_string((jstring)get_field<jobject>(env, oid, fid), env);
+    const auto result = static_cast<jstring>(get_field<jobject>(env, oid, fid));
+    if (env->ExceptionCheck()) {
+        env->DeleteLocalRef(result);
+        return {};
+    }
+    return to_string(result, env);
 }
 
 template<>
@@ -571,7 +586,12 @@ jdouble get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
 }
 template<>
 string get_static_field(JNIEnv* env, jclass cid, jfieldID fid) {
-    return to_string((jstring)get_static_field<jobject>(env, cid, fid), env);
+    const auto result = static_cast<jstring>(get_static_field<jobject>(env, cid, fid));
+    if (env->ExceptionCheck()) {
+        env->DeleteLocalRef(result);
+        return {};
+    }
+    return to_string(result, env);
 }
 
 template<>
