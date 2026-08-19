@@ -7,33 +7,24 @@
 using namespace std;
 using namespace jmi;
 
-constexpr bool EqualsSig(const array<char, 19>& a, const array<char, 19>& b) {
-    for (size_t i = 0; i < a.size(); ++i) {
-        if (a[i] != b[i])
-            return false;
+constexpr bool CstrEq(const char* a, const char* b) {
+    while (*a && *a == *b) {
+        ++a;
+        ++b;
     }
-    return true;
+    return *a == *b;
 }
 
-constexpr bool EqualsSig(const array<char, 19>& a, const char (&b)[19]) {
-    for (size_t i = 0; i < a.size(); ++i) {
-        if (a[i] != b[i])
-            return false;
-    }
-    return true;
+#if (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
+template<size_t N>
+constexpr bool CstrEq(const array<char, N>& a, const char* b) {
+    return CstrEq(a.data(), b);
 }
+#endif
 
-constexpr bool EqualsSig(const array<char, 3>& a, const char (&b)[3]) {
-    for (size_t i = 0; i < a.size(); ++i) {
-        if (a[i] != b[i])
-            return false;
-    }
-    return true;
-}
-
-static_assert(EqualsSig(jmi::signature_of<jobject>(), "Ljava/lang/Object;"));
-static_assert(EqualsSig(jmi::signature_of<jstring>(), "Ljava/lang/String;"));
-static_assert(EqualsSig(jmi::signature_of<jintArray>(), "[I"));
+static_assert(CstrEq(jmi::signature_of<jobject>(), "Ljava/lang/Object;"), "");
+static_assert(CstrEq(jmi::signature_of<jstring>(), "Ljava/lang/String;"), "");
+static_assert(CstrEq(jmi::signature_of<jintArray>(), "[I"), "");
 extern "C" jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 {
     JNIEnv* env = nullptr;

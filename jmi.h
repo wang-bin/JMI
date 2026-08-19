@@ -26,11 +26,6 @@
 #if (__cplusplus + 0) >= 201703L || (_MSVC_LANG+0) > 201402L
 #define JMI_CXX17 1
 #endif
-#if (JMI_CXX17 + 0)
-# include <string_view>
-#elif !defined(_LIBCPP_STRING_VIEW)
-using string_view = std::string;
-#endif
 #if (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
 # define CONSTEXPR17 constexpr
 #else
@@ -212,22 +207,22 @@ public:
 
     // the following call()/callStatic() will always invoke GetMethodID()/GetStaticMethodID()
     template<typename T, typename... Args, detail::if_not_MethodTag<T> = true>
-    T call(const string_view& methodName, Args&&... args) const; // if_not_MethodTag: call<Set>(cstr) must use MethodTag overload
+    T call(const char* methodName, Args&&... args) const;
     template<typename... Args>
-    void call(const string_view& methodName, Args&&... args) const;
+    void call(const char* methodName, Args&&... args) const;
     template<typename T, typename... Args, detail::if_not_MethodTag<T> = true>
-    static T callStatic(const string_view& name, Args&&... args);
+    static T callStatic(const char* name, Args&&... args);
     template<typename... Args>
-    static void callStatic(const string_view& name, Args&&... args);
+    static void callStatic(const char* name, Args&&... args);
 
     template<typename T>
-    T get(string_view fieldName) const;
+    T get(const char* fieldName) const;
     template<typename T>
-    bool set(string_view fieldName, T&& v);
+    bool set(const char* fieldName, T&& v);
     template<typename T>
-    static T getStatic(string_view fieldName);
+    static T getStatic(const char* fieldName);
     template<typename T>
-    static bool setStatic(string_view fieldName, T&& v);
+    static bool setStatic(const char* fieldName, T&& v);
 
     /*
         Field API
@@ -271,8 +266,8 @@ public:
         return Field<T, FTag, false>(classId(), oid_);
     }
     template<typename T>
-    auto field(string_view&& name) const->Field<T, void, false> {
-        return Field<T, void, false>(classId(), name.data(), oid_);
+    auto field(const char* name) const->Field<T, void, false> {
+        return Field<T, void, false>(classId(), name, oid_);
     }
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
     static auto staticField()->Field<T, FTag, true>& { // cacheable and static java storage, so returning ref is better
@@ -280,8 +275,8 @@ public:
         return f;
     }
     template<typename T>
-    static auto staticField(string_view&& name)->Field<T, void, true> {
-        return Field<T, void, true>(classId(), name.data());
+    static auto staticField(const char* name)->Field<T, void, true> {
+        return Field<T, void, true>(classId(), name);
     }
 private:
     static jclass classId(JNIEnv* env = nullptr);
@@ -1158,64 +1153,64 @@ bool JObject<CTag>::setStatic(T&& v) {
 
 template<class CTag>
 template<typename T, typename... Args, detail::if_not_MethodTag<T>>
-T JObject<CTag>::call(const string_view &methodName, Args&&... args) const {
+T JObject<CTag>::call(const char* methodName, Args&&... args) const {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
-    return call_with_methodID<T>(oid_, classId(), nullptr, [this](string&& err){ setError(std::move(err));}, s.data(), methodName.data(), std::forward<Args>(args)...);
+    return call_with_methodID<T>(oid_, classId(), nullptr, [this](string&& err){ setError(std::move(err));}, s.data(), methodName, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename... Args>
-void JObject<CTag>::call(const string_view &methodName, Args&&... args) const {
+void JObject<CTag>::call(const char* methodName, Args&&... args) const {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
-    call_with_methodID<void>(oid_, classId(), nullptr, [this](string&& err){ setError(std::move(err));}, s.data(), methodName.data(), std::forward<Args>(args)...);
+    call_with_methodID<void>(oid_, classId(), nullptr, [this](string&& err){ setError(std::move(err));}, s.data(), methodName, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename T, typename... Args, detail::if_not_MethodTag<T>>
-T JObject<CTag>::callStatic(const string_view &name, Args&&... args) {
+T JObject<CTag>::callStatic(const char* name, Args&&... args) {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
-    return call_static_with_methodID<T>(classId(), nullptr, nullptr, s.data(), name.data(), std::forward<Args>(args)...);
+    return call_static_with_methodID<T>(classId(), nullptr, nullptr, s.data(), name, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename... Args>
-void JObject<CTag>::callStatic(const string_view &name, Args&&... args) {
+void JObject<CTag>::callStatic(const char* name, Args&&... args) {
     using namespace detail;
     static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
-    call_static_with_methodID<void>(classId(), nullptr, nullptr, s.data(), name.data(), std::forward<Args>(args)...);
+    call_static_with_methodID<void>(classId(), nullptr, nullptr, s.data(), name, std::forward<Args>(args)...);
 }
 
 template<class CTag>
 template<typename T>
-T JObject<CTag>::get(string_view fieldName) const {
+T JObject<CTag>::get(const char* fieldName) const {
     jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([fieldName, this]{
         // TODO: check fid
-        setError(detail::handle_exception(string("Failed to get field '") + fieldName.data() + "' with signature '" + signature_of<T>().data() + "'."));
+        setError(detail::handle_exception(string("Failed to get field '") + fieldName + "' with signature '" + signature_of<T>().data() + "'."));
     });
-    return detail::get_field<T>(oid_, classId(), &fid, fieldName.data());
+    return detail::get_field<T>(oid_, classId(), &fid, fieldName);
 }
 template<class CTag>
 template<typename T>
-bool JObject<CTag>::set(string_view fieldName, T&& v) {
+bool JObject<CTag>::set(const char* fieldName, T&& v) {
     jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([fieldName, this]{
-        setError(detail::handle_exception(string("Failed to set field '") + fieldName.data() + "' with signature '" + signature_of<T>().data() + "'."));
+        setError(detail::handle_exception(string("Failed to set field '") + fieldName + "' with signature '" + signature_of<T>().data() + "'."));
     });
-    detail::set_field<T>(oid_, classId(), &fid, fieldName.data(), std::forward<T>(v));
+    detail::set_field<T>(oid_, classId(), &fid, fieldName, std::forward<T>(v));
     return true;
 }
 template<class CTag>
 template<typename T>
-T JObject<CTag>::getStatic(string_view fieldName) {
+T JObject<CTag>::getStatic(const char* fieldName) {
     jfieldID fid = nullptr;
-    return detail::get_static_field<T>(classId(), &fid, fieldName.data());
+    return detail::get_static_field<T>(classId(), &fid, fieldName);
 }
 template<class CTag>
 template<typename T>
-bool JObject<CTag>::setStatic(string_view fieldName, T&& v) {
+bool JObject<CTag>::setStatic(const char* fieldName, T&& v) {
     jfieldID fid = nullptr;
-    detail::set_static_field<T>(classId(), &fid, fieldName.data(), std::forward<T>(v));
+    detail::set_static_field<T>(classId(), &fid, fieldName, std::forward<T>(v));
     return true;
 }
 
