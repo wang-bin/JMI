@@ -787,6 +787,9 @@ namespace detail {
             const auto copy_back = !env->ExceptionCheck();
             ref_args_from_jvalues(env, jargs, copy_back, args...);
         });
+        // Argument conversion may have raised an exception; do not invoke JNI with it pending.
+        if (env->ExceptionCheck())
+            return T();
        return call_method<T>(env, oid, mid, jargs);
     }
 
@@ -819,6 +822,9 @@ namespace detail {
             const auto copy_back = !env->ExceptionCheck();
             ref_args_from_jvalues(env, jargs, copy_back, args...);
         });
+        // Argument conversion may have raised an exception; do not invoke JNI with it pending.
+        if (env->ExceptionCheck())
+            return T();
         return call_static_method<T>(env, cid, mid, jargs);
     }
 
