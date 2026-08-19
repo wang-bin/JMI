@@ -1069,7 +1069,14 @@ bool JObject<CTag>::create(Args&&... args) {
         setError(string("Failed to find constructor of '") + className().data() + "' with signature '" + s.data() + "'.");
         return false;
     }
-    LocalRef oid = env->NewObjectA(cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(std::forward<Args>(args), env)...}).begin())); // ptr0(jv) crash
+    const auto jargs = initializer_list<jvalue>{to_jvalue(std::forward<Args>(args), env)...};
+    const auto args_ptr = const_cast<jvalue*>(jargs.begin());
+    const auto cleanup = call_on_exit([=]{
+        ref_args_from_jvalues(env, args_ptr, false, args...);
+    });
+    if (env->ExceptionCheck())
+        return false;
+    LocalRef oid = env->NewObjectA(cid, mid, args_ptr);
     if (!oid) {
         setError(string("Failed to call constructor '") + className().data() + "' with signature '" + s.data() + "'.");
         return false;
