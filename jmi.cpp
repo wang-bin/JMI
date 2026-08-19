@@ -1,6 +1,7 @@
 /*
  * JMI: JNI Modern Interface
  * Copyright (C) 2016-2026 Wang Bin - wbsecg1@gmail.com
+ * AI participated
  * https://github.com/wang-bin/JMI
  * MIT License
  */
@@ -131,8 +132,10 @@ string to_string(jstring s, JNIEnv* env)
             return {};
     }
     const char* cs = env->GetStringUTFChars(s, nullptr);
-    if (!cs)
+    if (!cs) {
+        env->DeleteLocalRef(s);
         return {};
+    }
     string ss(cs);
     env->ReleaseStringUTFChars(s, cs);
     env->DeleteLocalRef(s);
