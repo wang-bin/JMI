@@ -37,10 +37,7 @@ namespace jmi {
 
 
 template<size_t N, class C, typename R, typename ...Args>
-constexpr auto param_at(R (C::*f)(Args...args)) noexcept
-{
-    return get<N>(make_tuple(Args{}...));
-}
+constexpr auto param_at(R (C::*)(Args...)) noexcept -> tuple_element_t<N, tuple<Args...>>;
 
 static jint jni_ver = JNI_VERSION_1_4;
 
@@ -366,7 +363,9 @@ void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const jobjec
 }
 template<>
 void set_jarray(JNIEnv *env, jarray arr, size_t position, size_t n, const bool &elm) {
-    if (n == 1 || sizeof(jboolean) == sizeof(bool)) {
+    if constexpr (sizeof(jboolean) == sizeof(bool)) {
+        env->SetBooleanArrayRegion((jbooleanArray)arr, (jsize)position, (jsize)n, (const jboolean*)&elm);
+    } else if (n == 1) {
         env->SetBooleanArrayRegion((jbooleanArray)arr, (jsize)position, (jsize)n, (const jboolean*)&elm);
     } else {
         vector<jboolean> tmp(n);

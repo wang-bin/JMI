@@ -20,11 +20,17 @@ constexpr bool CstrEq(const array<char, N>& a, const char* b) {
     return CstrEq(a.data(), b);
 }
 
-static_assert(CstrEq(jmi::signature_of<jobject>(), "Ljava/lang/Object;"), "");
-static_assert(CstrEq(jmi::signature_of<jstring>(), "Ljava/lang/String;"), "");
-static_assert(CstrEq(jmi::signature_of<jintArray>(), "[I"), "");
-static_assert(jmi::detail::is_ref_wrap<reference_wrapper<int>>::value, "");
-static_assert(!jmi::detail::is_ref_wrap<decay<int>>::value, "");
+static_assert(CstrEq(jmi::signature_of<jobject>(), "Ljava/lang/Object;"));
+static_assert(CstrEq(jmi::signature_of<jstring>(), "Ljava/lang/String;"));
+static_assert(CstrEq(jmi::signature_of<jintArray>(), "[I"));
+static_assert(CstrEq(jmi::signature_v<jintArray>, "[I"));
+static_assert(jmi::detail::is_ref_wrap_v<reference_wrapper<int>>);
+static_assert(!jmi::detail::is_ref_wrap_v<decay<int>>);
+static_assert(jmi::detail::is_jobject_v<jstring>);
+static_assert(jmi::detail::is_jarray_v<jintArray>);
+static_assert(jmi::detail::is_cstring_v<const char*>);
+static_assert(jmi::impl::operator==(jmi::to_array("jmi"), "jmi"));
+static_assert(!jmi::impl::operator==(jmi::to_array("jmi"), "jni"));
 extern "C" jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 {
     JNIEnv* env = nullptr;
