@@ -15,12 +15,10 @@ constexpr bool CstrEq(const char* a, const char* b) {
     return *a == *b;
 }
 
-#if (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
 template<size_t N>
 constexpr bool CstrEq(const array<char, N>& a, const char* b) {
     return CstrEq(a.data(), b);
 }
-#endif
 
 static_assert(CstrEq(jmi::signature_of<jobject>(), "Ljava/lang/Object;"), "");
 static_assert(CstrEq(jmi::signature_of<jstring>(), "Ljava/lang/String;"), "");

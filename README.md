@@ -160,12 +160,12 @@ You may find that a macro can simplify above example:
 
 #### Compilers
 
-c++14/17 is required
+c++17 or later is required
 
-- g++ >= 4.9.0(except 8.0~8.3)
-- clang >= 3.5
-- msvc>= 19.0
-- icc >= 17.0
+- g++ >= 7.0(except 8.0~8.3)
+- clang >= 5.0
+- msvc >= 19.14
+- icc >= 18.0
 
 
 ### TODO

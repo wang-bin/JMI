@@ -5,7 +5,7 @@
  * https://github.com/wang-bin/JMI
  * MIT License
  */
-// requres: c++14. compile time signaure requires c++17
+// requires: c++17
 // TODO: reset error before each call, reset exception after each call (Aspect pattern?)
 // TODO: query class path if return/parameter type is jobject
 // TODO: object convert
@@ -19,17 +19,11 @@
 #include <string>
 #include <type_traits>
 #include <jni.h>
-#define JMI_USE_CXX17 1
+#if (__cplusplus + 0) < 201703L && (_MSVC_LANG + 0) <= 201402L
+#error JMI requires C++17 or later
+#endif
 #if (__cplusplus + 0) >= 201707L || (_MSVC_LANG+0) > 201703L
 #define JMI_CXX20 1
-#endif
-#if (__cplusplus + 0) >= 201703L || (_MSVC_LANG+0) > 201402L
-#define JMI_CXX17 1
-#endif
-#if (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
-# define CONSTEXPR17 constexpr
-#else
-# define CONSTEXPR17 const
 #endif
 
 namespace jmi {
@@ -54,7 +48,7 @@ namespace android {
 jobject application(JNIEnv* env = nullptr); // TODO: return LocalRef
 } // namespace android
 
-#define JMISTR(cstr) jmi::to_array(cstr) // cstr is a c string literal. the result is a const char* for c++14, array<char,N> for c++17
+#define JMISTR(cstr) jmi::to_array(cstr) // cstr is a c string literal; result is array<char,N>
 
 struct ClassTag {}; // used by JObject<Tag>. subclasses must define static constexpr auto name() {return JMISTR("someName");}, with or without "L ;" around someName
 struct MethodTag {}; // used by call() and callStatic(). subclasses must define static const char* name() or static constexpr const char*();
@@ -62,7 +56,6 @@ struct FieldTag {}; // subclasses must define static const char* name() or stati
 
 namespace detail {
 struct JavaLangClassTag;
-// using var template requires c++14
 template<class T>
 struct is_jobject : integral_constant<bool, is_base_of<typename remove_pointer<jobject>::type, typename remove_pointer<T>::type>::value> {};
 
@@ -88,13 +81,11 @@ using if_not_JObject = typename enable_if<!is_JObject<T>::value, bool>::type;
 //template<typename T> // jni primitive types(not all c++ arithmetic types?), jobject, jstring, ..., JObject, c++ array types
 //using if_jni_type = typename enable_if<is_arithmetic<T>::value || is_array_like<T>::value || is_same<T,jobject> || ... || is_JObject<T>::value
 template<typename T, bool = is_enum<T>::value> struct signature;
-#if (JMI_CXX17+0)
 template<typename T>
 inline constexpr auto signature_v = signature<T, is_enum_v<T>>::value;
-#endif
-// auto signature_of<T>() returns signature of object of type T, return type is array<char,N> for c++17+, string for c++14, and char. signature_of() returns signature of void type
+// signature_of<T>() returns the JNI signature of T as array<char,N> (or char for void). signature_of() is void's signature
 // signature of function ptr
-template<typename R, typename... Args> CONSTEXPR17 auto signature_of(R(*)(Args...));
+template<typename R, typename... Args> constexpr auto signature_of(R(*)(Args...));
 
 class LocalRef {
 public:
@@ -136,8 +127,8 @@ class JObject : public ClassTag
 {
 public:
     using Tag = CTag;
-    static CONSTEXPR17 auto className(); // array<char, N> for c++17+, string for otherwise
-    static CONSTEXPR17 auto signature(); // array<char, N> for c++17+, string for otherwise
+    static constexpr auto className(); // array<char, N>
+    static constexpr auto signature(); // array<char, N>
 
     // construct from an existing jobject. Usually obj is from native jni api containing a local ref, and it's local ref will be deleted if del_localref is true
     JObject(jobject obj = nullptr, bool del_localref = true) {
@@ -367,7 +358,6 @@ using if_not_cstring = enable_if_t<!is_same<decay_t<T>, char*>::value && !is_sam
 inline namespace impl {
     static inline string to_string(const string& s) noexcept { return s;}
 
-#if (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
     template<typename F, size_t... I>
     constexpr auto make_array(F&& f, index_sequence<I...>) { return array{ f(I)... };}
     template<size_t N, typename F>
@@ -454,32 +444,6 @@ inline namespace impl {
     constexpr bool operator==(const array<char, N1> a, const char (&s)[N2]) noexcept {
         return N1 == N2 && equal(a.begin(), a.end(), begin(s));
     }
-#else
-    static inline string to_string(const char& s) noexcept { return {s};}
-    template<size_t N>
-    string to_string(const char (&s)[N]) noexcept { return s;}
-
-    template<size_t N>
-    constexpr const char* to_array(const char (&s)[N]) noexcept { return s;}
-    static inline auto to_array(const string& s) noexcept { return s;}
-    static inline string to_array(char s) noexcept { return {s};}
-
-    template <typename T1>
-    auto zconcat(T1 const& t1) noexcept { return to_string(t1);}
-    template <typename T1, typename... Rest>
-    auto zconcat(T1 const& t1, Rest const&... rest) noexcept
-    {
-        return to_string(t1).append(zconcat(rest...));
-    }
-
-    static inline auto norm(string s) noexcept
-    {
-        if (s[0] == 'L' && s.back() == ';')
-            s = s.substr(1, s.size()-2);
-        replace(s.begin(), s.end(), '.', '/');
-        return s;
-    }
-#endif
 } // namespace impl
 
 namespace detail {
@@ -517,19 +481,19 @@ struct signature<E, true> : signature<jint>{};
 
 template<typename T, detail::if_not_pointer<T> = true, detail::if_not_JObject<T> = true, detail::if_not_jarray_cpp<T> = true
     , detail::if_not_ref_wrap<T> = true, detail::if_not_cstring<T> = true>
-CONSTEXPR17 auto signature_of() {
+constexpr auto signature_of() {
     return to_array(signature<remove_cvref_t<decay_t<T>>>::value); // initializer supports both char and char*
 }
 
 //template<class CTag> inline string signature_of(const JObject<CTag>& t) { return t.signature();} // won't work if JObject subclass inherits JObject<...>
 // TODO: use c++20 requires
 template<class T, detail::if_JObject<T> = true>
-CONSTEXPR17 auto signature_of() { return T::signature();}
+constexpr auto signature_of() { return T::signature();}
 // if T is jobject or LocalRef, signature can get from GetObjectClass=>getName, but can not be cached
 constexpr auto signature_of() { return 'V';}
 
 template<typename T, detail::if_jarray_cpp<T> = true>
-CONSTEXPR17 auto signature_of() {
+constexpr auto signature_of() {
     return zconcat('[', signature_of<remove_cvref_t<decltype(T{}[0])>>()); // both c array and cpp containers
 }
 
@@ -551,32 +515,32 @@ constexpr auto signature_of() { return signature<T>::value;}
 
 // NOTE: define reference_wrapper at last. assume we only use reference_wrapper<...>, no container<reference_wrapper<...>>
 template<typename T, detail::if_ref_wrap<T> = true, detail::if_not_jarray_cpp<typename T::type> = true>
-CONSTEXPR17 auto signature_of() {
+constexpr auto signature_of() {
     return signature_of<typename T::type>();
 }
 template<typename T, detail::if_ref_wrap<T> = true, detail::if_jarray_cpp<typename T::type> = true>
-CONSTEXPR17 auto signature_of() {
+constexpr auto signature_of() {
     using E = typename T::type;
     return zconcat('[', signature_of<remove_cvref_t<decltype(E{}[0])>>());
 }
 // signature_of_no_ptr: consistent for any type, including void. so for call<T,MT>(...) T can be void. TODO: remove
 template<typename T, typename enable_if<is_pointer<T>::value && !is_same<T, void*>::value, bool>::type = true>
-CONSTEXPR17 auto signature_of_no_ptr() { return signature_of<typename remove_pointer<T>::type>();}
+constexpr auto signature_of_no_ptr() { return signature_of<typename remove_pointer<T>::type>();}
 template<typename T, typename enable_if<is_same<T, void*>::value, bool>::type = true>
 constexpr auto signature_of_no_ptr() { return signature_of();}
 
 namespace detail {
     template<typename... Args>
-    CONSTEXPR17 auto args_signature() {
+    constexpr auto args_signature() {
         return zconcat('(', signature_of<remove_cvref_t<Args>>()..., ')');
     }
 
-    static inline CONSTEXPR17 auto args_signature() { return zconcat('(', signature_of(), ')');}
+    static inline constexpr auto args_signature() { return zconcat('(', signature_of(), ')');}
 } //namespace detail
 
 
 template<typename R, typename... Args>
-CONSTEXPR17 auto signature_of(R (*)(Args...)) {
+constexpr auto signature_of(R (*)(Args...)) {
     return zconcat(detail::args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<R>::type>());;
 }
 
@@ -998,21 +962,16 @@ namespace detail {
 } // namespace detail
 
 template<class CTag>
-CONSTEXPR17 auto JObject<CTag>::className()
+constexpr auto JObject<CTag>::className()
 {
-#if (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
     if constexpr (CTag::name()[0] == 'L' && CTag::name()[CTag::name().size() - 2] == ';') // N - 1 == '\0', check N - 2
         return impl::norm(zsub<CTag::name().size() - 3>(CTag::name(), 1));
     else
         return impl::norm(CTag::name());
-#else
-    static string s = impl::norm(CTag::name());
-    return s;
-#endif // (JMI_CXX17+0) && (JMI_USE_CXX17 + 0)
 }
 
 template<class CTag>
-CONSTEXPR17 auto JObject<CTag>::signature()
+constexpr auto JObject<CTag>::signature()
 {
     return zconcat("L", className(), ";");
 }
@@ -1058,7 +1017,7 @@ bool JObject<CTag>::create(Args&&... args) {
         return false;
     }
     const auto checker = call_on_exit([=]{ handle_exception({}, env); });
-    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of()); // void
+    static constexpr auto s = zconcat(args_signature<Args...>(), signature_of()); // void
     static const jmethodID mid = env->GetMethodID(cid, "<init>", s.data()); // can be static because class id, signature and arguments combination is unique
     if (!mid) {
         setError(string("Failed to find constructor of '") + className().data() + "' with signature '" + s.data() + "'.");
@@ -1109,7 +1068,7 @@ template<class CTag>
 template<typename T, class MTag, typename... Args, detail::if_MethodTag<MTag>>
 T JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
-    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
+    static constexpr auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
     static jmethodID mid = nullptr;
     return call_with_methodID<T>(oid_, classId(), &mid, [this](string&& err){ setError(std::move(err));}, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
@@ -1117,7 +1076,7 @@ template<class CTag>
 template<class MTag, typename... Args, detail::if_MethodTag<MTag>>
 void JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
-    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
+    static constexpr auto s = zconcat(args_signature<Args...>(), signature_of());
     static jmethodID mid = nullptr;
     call_with_methodID<void>(oid_, classId(), &mid, [this](string&& err){ setError(std::move(err));}, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
@@ -1125,7 +1084,7 @@ template<class CTag>
 template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
 T JObject<CTag>::callStatic(Args&&... args) {
     using namespace detail;
-    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
+    static constexpr auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
     static jmethodID mid = nullptr;
     return call_static_with_methodID<T>(classId(), &mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
@@ -1133,7 +1092,7 @@ template<class CTag>
 template<class MTag, typename... Args,  detail::if_MethodTag<MTag>>
 void JObject<CTag>::callStatic(Args&&... args) {
     using namespace detail;
-    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
+    static constexpr auto s = zconcat(args_signature<Args...>(), signature_of());
     static jmethodID mid = nullptr;
     call_static_with_methodID<void>(classId(), &mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
@@ -1177,28 +1136,28 @@ template<class CTag>
 template<typename T, typename... Args, detail::if_not_MethodTag<T>>
 T JObject<CTag>::call(const char* methodName, Args&&... args) const {
     using namespace detail;
-    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
+    static constexpr auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
     return call_with_methodID<T>(oid_, classId(), nullptr, [this](string&& err){ setError(std::move(err));}, s.data(), methodName, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename... Args>
 void JObject<CTag>::call(const char* methodName, Args&&... args) const {
     using namespace detail;
-    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
+    static constexpr auto s = zconcat(args_signature<Args...>(), signature_of());
     call_with_methodID<void>(oid_, classId(), nullptr, [this](string&& err){ setError(std::move(err));}, s.data(), methodName, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename T, typename... Args, detail::if_not_MethodTag<T>>
 T JObject<CTag>::callStatic(const char* name, Args&&... args) {
     using namespace detail;
-    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
+    static constexpr auto s = zconcat(args_signature<Args...>(), signature_of_no_ptr<typename add_pointer<T>::type>());
     return call_static_with_methodID<T>(classId(), nullptr, nullptr, s.data(), name, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename... Args>
 void JObject<CTag>::callStatic(const char* name, Args&&... args) {
     using namespace detail;
-    static CONSTEXPR17 auto s = zconcat(args_signature<Args...>(), signature_of());
+    static constexpr auto s = zconcat(args_signature<Args...>(), signature_of());
     call_static_with_methodID<void>(classId(), nullptr, nullptr, s.data(), name, std::forward<Args>(args)...);
 }
 
