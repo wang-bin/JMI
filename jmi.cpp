@@ -314,7 +314,8 @@ jvalue to_jvalue(const char* s, JNIEnv* env) {
 
 template<>
 jarray make_jarray(JNIEnv *env, const jobject &element, size_t size) {
-    return env->NewObjectArray((jsize)size, env->GetObjectClass(element), nullptr); // vc: warning C4267: 'argument': conversion from 'size_t' to 'jsize', possible loss of data
+    const LocalRef c(env->GetObjectClass(element), env);
+    return env->NewObjectArray((jsize)size, c, nullptr); // vc: warning C4267: 'argument': conversion from 'size_t' to 'jsize', possible loss of data
 }
 template<>
 jarray make_jarray(JNIEnv *env, const jboolean&, size_t size) {
