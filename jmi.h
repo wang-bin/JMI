@@ -1299,17 +1299,12 @@ JObject<CTag>::Field<F, MayBeFTag, isStaticField>::Field(jclass cid, const char*
 
 template<class CTag>
 jclass JObject<CTag>::classId(JNIEnv* env) {
-    static jclass c = nullptr;
-    if (!c) {
-        if (!env) {
+    static const jclass c = [&]{
+        if (!env)
             env = getEnv();
-            if (!env)
-                return c;
-        }
         LocalRef cid(env->FindClass(className().data()), env);
-        if (cid)
-            c = static_cast<jclass>(env->NewGlobalRef(cid)); // cache per (c++/java)class class id
-    }
+        return static_cast<jclass>(env->NewGlobalRef(cid));
+    }();
     return c;
 }
 
