@@ -37,15 +37,15 @@ using namespace std;
 
 // set JavaVM to vm if not null. return previous JavaVM
 JavaVM* javaVM(JavaVM *vm = nullptr, jint version = JNI_VERSION_1_4);
-JNIEnv *getEnv();
+[[nodiscard]] JNIEnv *getEnv();
 // to_string: local ref is deleted internally
-string to_string(jstring s, JNIEnv* env = nullptr);
+[[nodiscard]] string to_string(jstring s, JNIEnv* env = nullptr);
 // You have to call DeleteLocalRef() manually for the returned jstring
-jstring from_string(const string& s, JNIEnv* env = nullptr);
+[[nodiscard]] jstring from_string(const string& s, JNIEnv* env = nullptr);
 
 namespace android {
 // current android/app/Application object containing a local ref
-jobject application(JNIEnv* env = nullptr); // TODO: return LocalRef
+[[nodiscard]] jobject application(JNIEnv* env = nullptr); // TODO: return LocalRef
 } // namespace android
 
 #define JMISTR(cstr) jmi::to_array(cstr) // cstr is a c string literal; result is array<char,N>
@@ -98,7 +98,7 @@ inline constexpr auto signature_v = signature<T, is_enum_v<T>>::value;
 // signature of function ptr
 template<typename R, typename... Args> constexpr auto signature_of(R(*)(Args...));
 
-class LocalRef {
+class [[nodiscard]] LocalRef {
 public:
     template<typename J, detail::if_jobject<J> = true>
     LocalRef(J j, JNIEnv* env = nullptr) : j_(j), env_(env) {}
@@ -123,14 +123,14 @@ public:
     template<typename J, detail::if_jobject<J> = true>
     operator J() const {return static_cast<J>(j_);}
     template<typename J, detail::if_jobject<J> = true>
-    J get() const {return static_cast<J>(j_);}
+    [[nodiscard]] J get() const {return static_cast<J>(j_);}
 private:
     jobject j_ = nullptr;
     JNIEnv* env_ = nullptr;
 };
 
 // The local reference is owned by s and deleted when the temporary is destroyed.
-string to_string(LocalRef&& s, JNIEnv* env = nullptr);
+[[nodiscard]] string to_string(LocalRef&& s, JNIEnv* env = nullptr);
 
 // object must be a class template, thus we can cache class id using static member and call FindClass() only once, and also make it possible to cache method id because method id
 template<class CTag>
@@ -175,20 +175,20 @@ public:
     JObject& reset(jobject obj = nullptr, JNIEnv *env = nullptr);
 
     template<typename... Args>
-    bool create(Args&&... args);
+    [[nodiscard]] bool create(Args&&... args);
 
-    string toString() const;
-    auto getClass() const -> JObject<detail::JavaLangClassTag>;
-    jint hashCode() const;
+    [[nodiscard]] string toString() const;
+    [[nodiscard]] auto getClass() const -> JObject<detail::JavaLangClassTag>;
+    [[nodiscard]] jint hashCode() const;
     template<class OtherTag>
-    bool equals(const JObject<OtherTag>& other) const;
+    [[nodiscard]] bool equals(const JObject<OtherTag>& other) const;
 
     /* with MethodTag we can avoid calling GetMethodID() in every call()
         struct MyMethod : jmi::MethodTag { static const char* name() { return "myMethod";} };
         return call<T, MyMethod>(args...);
     */
     template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag> = true>
-    inline T call(Args&&... args) const;
+    [[nodiscard]] inline T call(Args&&... args) const;
     template<class MTag, typename... Args,  detail::if_MethodTag<MTag> = true>
     inline void call(Args&&... args) const;
     /* with MethodTag we can avoid calling GetStaticMethodID() in every callStatic()
@@ -196,38 +196,38 @@ public:
         JObject<CT>::callStatic<R, MyStaticMethod>(args...);
     */
     template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag> = true>
-    static T callStatic(Args&&... args);
+    [[nodiscard]] static T callStatic(Args&&... args);
     template<class MTag, typename... Args,  detail::if_MethodTag<MTag> = true>
     static void callStatic(Args&&... args);
 
     // get/set field and static field
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
-    T get() const;
+    [[nodiscard]] T get() const;
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
-    bool set(T&& v);
+    [[nodiscard]] bool set(T&& v);
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
-    static T getStatic();
+    [[nodiscard]] static T getStatic();
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
-    static bool setStatic(T&& v);
+    [[nodiscard]] static bool setStatic(T&& v);
 
     // the following call()/callStatic() will always invoke GetMethodID()/GetStaticMethodID()
     template<typename T, typename... Args, detail::if_not_MethodTag<T> = true>
-    T call(const char* methodName, Args&&... args) const;
+    [[nodiscard]] T call(const char* methodName, Args&&... args) const;
     template<typename... Args>
     void call(const char* methodName, Args&&... args) const;
     template<typename T, typename... Args, detail::if_not_MethodTag<T> = true>
-    static T callStatic(const char* name, Args&&... args);
+    [[nodiscard]] static T callStatic(const char* name, Args&&... args);
     template<typename... Args>
     static void callStatic(const char* name, Args&&... args);
 
     template<typename T>
-    T get(const char* fieldName) const;
+    [[nodiscard]] T get(const char* fieldName) const;
     template<typename T>
-    bool set(const char* fieldName, T&& v);
+    [[nodiscard]] bool set(const char* fieldName, T&& v);
     template<typename T>
-    static T getStatic(const char* fieldName);
+    [[nodiscard]] static T getStatic(const char* fieldName);
     template<typename T>
-    static bool setStatic(const char* fieldName, T&& v);
+    [[nodiscard]] static bool setStatic(const char* fieldName, T&& v);
 
     /*
         Field API
@@ -241,12 +241,12 @@ public:
      */
     // F can be supported types: jni primitives(jint, jlong, ... not jobject because we can't know class name) and JObject
     template<typename F, class MayBeFTag, bool isStaticField>
-    class Field { // JObject.classId() works in Field?
+    class [[nodiscard]] Field { // JObject.classId() works in Field?
     public:
         jfieldID id() const { return fid_; }
         operator jfieldID() const { return fid_; }
         operator F() const { return get(); }
-        F get() const;
+        [[nodiscard]] F get() const;
         void set(F&& v);
         Field& operator=(F&& v) {
             set(std::forward<F>(v));
@@ -267,20 +267,20 @@ public:
         friend class JObject<CTag>;
     };
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
-    auto field() const->Field<T, FTag, false> {
+    [[nodiscard]] auto field() const->Field<T, FTag, false> {
         return Field<T, FTag, false>(classId(), oid_);
     }
     template<typename T>
-    auto field(const char* name) const->Field<T, void, false> {
+    [[nodiscard]] auto field(const char* name) const->Field<T, void, false> {
         return Field<T, void, false>(classId(), name, oid_);
     }
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
-    static auto staticField()->Field<T, FTag, true>& { // cacheable and static java storage, so returning ref is better
+    [[nodiscard]] static auto staticField()->Field<T, FTag, true>& { // cacheable and static java storage, so returning ref is better
         static Field<T, FTag, true> f(classId());
         return f;
     }
     template<typename T>
-    static auto staticField(const char* name)->Field<T, void, true> {
+    [[nodiscard]] static auto staticField(const char* name)->Field<T, void, true> {
         return Field<T, void, true>(classId(), name);
     }
 private:
@@ -628,7 +628,7 @@ namespace detail {
     // T(&)[N]?
 
     template<typename... Args>
-    auto make_jargs(JNIEnv* env, Args&&... args) {
+    [[nodiscard]] auto make_jargs(JNIEnv* env, Args&&... args) {
         return array<jvalue, sizeof...(Args)>{to_jvalue(std::forward<Args>(args), env)...};
     }
 

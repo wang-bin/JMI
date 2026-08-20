@@ -250,7 +250,7 @@ void test()
 	cout << jstr.signature().size() << jstr.signature().data() << endl << flush;
 	TEST(jstr.signature() == "Ljava/lang/String;");
 	jstr.reset();
-	jstr.create("abcd");
+	TEST(jstr.create("abcd"));
 	TEST(jstr.call<jint>("length") == 4);
 	jchar ccc = jstr.call<jchar>("charAt", (jint)2);
 	TEST(ccc == 'c');
@@ -295,7 +295,7 @@ void test()
 	cout << ">>>>>>>>>>>>testing Cacheable StaticField APIs..." << endl;
 	auto& fsstr = jmi::JObject<JMITest>::staticField<SStr, std::string>();
 	TEST(fsstr.get() == ":D setting static string...");
-	jmi::JObject<JMITest>::staticField<SStr, std::string>();
+	(void)jmi::JObject<JMITest>::staticField<SStr, std::string>();
 	fsstr = jmi::JObject<JMITest>::staticField<SStr, std::string>();
 	fsstr.set("Cacheable StaticField sstr set");
 	TEST(fsstr.get() == "Cacheable StaticField sstr set");
@@ -314,7 +314,7 @@ void test()
 	//cout << "field JMITest.sstr from Uncacheable StaticField object after =(): " << ufsstr.get() << endl;
 
 	cout << ">>>>>>>>>>>>testing Cacheable field APIs..." << endl;
-	test.create();
+	TEST(test.create());
 	struct X : public jmi::FieldTag { static const char* name() { return "x";}};
 	int x = test.get<X, jint>();
 	TEST(x == 0);
@@ -331,7 +331,7 @@ void test()
 	auto fstr = test.field<Str, std::string>();
 	TEST((string)fstr == string(":D setting string..."));
 	fstr = test.field<Str, std::string>();
-	test.field<Str, std::string>();
+	(void)test.field<Str, std::string>();
 	fstr.set("Cacheable Field str set");
 	std::string v_fstr = fstr;
 	jfieldID id_fstr = fstr;
