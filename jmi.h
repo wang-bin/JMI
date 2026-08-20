@@ -627,6 +627,11 @@ namespace detail {
     jvalue to_jvalue(const JObject<CTag> &obj, JNIEnv* env);
     // T(&)[N]?
 
+    template<typename... Args>
+    auto make_jargs(JNIEnv* env, Args&&... args) {
+        return array<jvalue, sizeof...(Args)>{to_jvalue(std::forward<Args>(args), env)...};
+    }
+
 // from_jvalue/array() is called if parameter of call() is of type reference_wrapper<...>
     template<typename T, if_not_JObject<T> = true>
     void from_jarray(JNIEnv* env, const jvalue& v, T* t, size_t N);
@@ -808,7 +813,8 @@ namespace detail {
         }
         if (!mid || env->ExceptionCheck())
             return T();
-        return call_method_set_ref<T>(env, oid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(std::forward<Args>(args), env)...}).begin()), std::forward<Args>(args)...);
+        auto jargs = make_jargs(env, std::forward<Args>(args)...);
+        return call_method_set_ref<T>(env, oid, mid, jargs.empty() ? nullptr : jargs.data(), std::forward<Args>(args)...);
     }
 
     template<typename T, typename ErrCb, typename... Args>
@@ -832,7 +838,8 @@ namespace detail {
         }
         if (!mid || env->ExceptionCheck())
             return T();
-        return call_static_method_set_ref<T>(env, cid, mid, const_cast<jvalue*>(initializer_list<jvalue>({to_jvalue(std::forward<Args>(args), env)...}).begin()), std::forward<Args>(args)...);
+        auto jargs = make_jargs(env, std::forward<Args>(args)...);
+        return call_static_method_set_ref<T>(env, cid, mid, jargs.empty() ? nullptr : jargs.data(), std::forward<Args>(args)...);
     }
 
 
@@ -1015,8 +1022,8 @@ bool JObject<CTag>::create(Args&&... args) {
         setError(string("Failed to find constructor of '") + className().data() + "' with signature '" + s.data() + "'.");
         return false;
     }
-    const auto jargs = initializer_list<jvalue>{to_jvalue(std::forward<Args>(args), env)...};
-    const auto args_ptr = const_cast<jvalue*>(jargs.begin());
+    auto jargs = make_jargs(env, std::forward<Args>(args)...);
+    auto* const args_ptr = jargs.empty() ? nullptr : jargs.data();
     const auto cleanup = call_on_exit([=]{
         ref_args_from_jvalues(env, args_ptr, false, args...);
     });
