@@ -29,6 +29,18 @@ static_assert(!jmi::detail::is_ref_wrap_v<decay<int>>);
 static_assert(jmi::detail::is_jobject_v<jstring>);
 static_assert(jmi::detail::is_jarray_v<jintArray>);
 static_assert(jmi::detail::is_cstring_v<const char*>);
+struct OnlyClassTag : jmi::ClassTag {
+    static constexpr auto name() { return JMISTR("java/lang/Object"); }
+};
+static_assert(jmi::detail::is_ClassTag_v<OnlyClassTag>);
+static_assert(!jmi::detail::is_JObject_v<OnlyClassTag>);
+static_assert(!jmi::detail::is_JObject_v<jmi::ClassTag>);
+struct HasSigButNotClassTag {
+    static constexpr auto signature() { return JMISTR("Ljava/lang/Object;"); }
+};
+static_assert(!jmi::detail::is_JObject_v<HasSigButNotClassTag>);
+static_assert(jmi::detail::is_JObject_v<jmi::JObject<OnlyClassTag>>);
+static_assert(CstrEq(jmi::signature_of<jmi::JObject<OnlyClassTag>>(), "Ljava/lang/Object;"));
 static_assert(jmi::impl::operator==(jmi::to_array("jmi"), "jmi"));
 static_assert(!jmi::impl::operator==(jmi::to_array("jmi"), "jni"));
 extern "C" jint JNICALL JNI_OnLoad(JavaVM* vm, void*)

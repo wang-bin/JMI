@@ -80,8 +80,22 @@ template<class Tag>
 using if_not_MethodTag = enable_if_t<!is_MethodTag_v<Tag>, bool>;
 template<class Tag>
 using if_FieldTag = enable_if_t<is_FieldTag_v<Tag>, bool>;
+
+// detection idiom (std::experimental::is_detected subset)
+template<template<class...> class Op, class, class... Args>
+struct detector : false_type {};
+template<template<class...> class Op, class... Args>
+struct detector<Op, void_t<Op<Args...>>, Args...> : true_type {};
+template<template<class...> class Op, class... Args>
+using is_detected = detector<Op, void, Args...>;
+template<template<class...> class Op, class... Args>
+inline constexpr bool is_detected_v = is_detected<Op, Args...>::value;
+
 template<class T>
-inline constexpr bool is_JObject_v = is_base_of_v<ClassTag, T>; // TODO: is_detected<signature>
+using jobject_signature_t = decltype(T::signature());
+// JObject (or CRTP subclass) is a ClassTag and exposes signature(); plain ClassTag only has name()
+template<class T>
+inline constexpr bool is_JObject_v = is_base_of_v<ClassTag, T> && is_detected_v<jobject_signature_t, T>;
 template<class T>
 struct is_JObject : bool_constant<is_JObject_v<T>> {};
 template<class T>
