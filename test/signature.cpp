@@ -16,7 +16,7 @@ constexpr bool CstrEq(const char* a, const char* b) {
 }
 
 template<size_t N>
-constexpr bool CstrEq(const array<char, N>& a, const char* b) {
+constexpr bool CstrEq(const ct_string<N>& a, const char* b) {
     return CstrEq(a.data(), b);
 }
 
@@ -41,8 +41,19 @@ struct HasSigButNotClassTag {
 static_assert(!jmi::detail::is_JObject_v<HasSigButNotClassTag>);
 static_assert(jmi::detail::is_JObject_v<jmi::JObject<OnlyClassTag>>);
 static_assert(CstrEq(jmi::signature_of<jmi::JObject<OnlyClassTag>>(), "Ljava/lang/Object;"));
-static_assert(jmi::impl::operator==(jmi::to_array("jmi"), "jmi"));
-static_assert(!jmi::impl::operator==(jmi::to_array("jmi"), "jni"));
+#if (JMI_CXX20 + 0)
+static_assert(CstrEq(jmi::JObject<jmi::NamedClassTag<"java/lang/String">>::signature(), "Ljava/lang/String;"));
+static_assert(CstrEq(jmi::JObject<jmi::NamedClassTag<"Ljava/lang/String;">>::className(), "java/lang/String"));
+static_assert(CstrEq(jmi::NamedMethodTag<"toString">::name(), "toString"));
+static_assert("jmi"_jmis.size() == 4);
+static_assert(CstrEq("jmi"_jmis.data(), "jmi"));
+static_assert("java/lang/String"_jmis.size() == JMISTR("java/lang/String").size());
+#endif
+static_assert(jmi::impl::operator==(ct_string("jmi"), "jmi"));
+static_assert(!jmi::impl::operator==(ct_string("jmi"), "jni"));
+static_assert(CstrEq(ct_string("1") + "2" + "3", "123"));
+static_assert(CstrEq("L" + JMISTR("java/lang/Object") + ";", "Ljava/lang/Object;"));
+static_assert(signature_v<jint>.length() == 1);
 extern "C" jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 {
     JNIEnv* env = nullptr;
@@ -69,7 +80,7 @@ int main(int argc, char *argv[])
     //cout << jmi::signature_of(1.2f) << endl;
     cout << jmi::signature_of<std::string>().data() << endl;
     std::valarray<jfloat> f;
-    cout << jmi::signature_of<decltype(&f)>() << endl;
+    cout << jmi::signature_of<decltype(&f)>().data() << endl;
     cout << jmi::signature_of<decltype(f)>().data() << endl;
     std::vector<std::string> s;
     cout << jmi::signature_of<decltype(std::ref(s))>().data() << endl;

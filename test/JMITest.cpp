@@ -230,13 +230,7 @@ void test()
     TEST(jv_obj.l == (jobject)raw_obj);
 	const jbyte cs[] = {'1', '2', '3'};
     std::array<jbyte, 3> cxxa{'a', 'b', 'c'};
-	//cout << zconcat('1', '2', '3').size() << endl;
-	//cout << zconcat('1', '2', '3').data() << endl << flush;
-	//cout << zconcat(zconcat('1', '2'), '3').size() << endl << flush;
-	//cout << ttt<decltype(cxxa)>().data() << endl << flush;
-	//static_assert(zconcat('1', '2') == array{'1', '2', '\0'});
-	//static_assert(zconcat(array{'1', '2', '\0'}, array{'3', '\0'}) == array{'1', '2', '3', '\0'});
-	//static_assert(zconcat(array{'1', '2', '\0'}, '3') == array{'1', '2', '3', '\0'});
+	//static_assert(ct_string("1") + "2" + "3" == ct_string("123"));
 	//static_assert(jmi::signature_of<decltype(cxxa)>() == JMISTR("[B"));
 	struct JString : jmi::ClassTag {
 		static constexpr auto name() { return jmi::signature<std::string>::value;};//jmi::signature_of<std::string>();}
