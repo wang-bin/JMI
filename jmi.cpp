@@ -62,13 +62,15 @@ static void detach(void* = nullptr)
         clog << "JMI ERROR: DetachCurrentThread " << status << endl;
 };
 
-JNIEnv *getEnv() {
+JNIEnv *getEnv(JNIEnv* env) {
+    if (env)
+        return env;
     assert(javaVM() && "javaVM() is null");
     if (!javaVM()) {
         clog << "JMI ERROR: java vm is null" << endl;
         return nullptr;
     }
-    JNIEnv* env = nullptr;
+    // ART/JVM may already use thread-local state in GetEnv(); an additional JMI TLS cache is not necessarily faster.
     int status = javaVM()->GetEnv((void**)&env, jni_ver);
     if (status == JNI_OK)
         return env;
@@ -133,11 +135,8 @@ static string to_string_impl(jstring s, JNIEnv* env)
 
 string to_string(jstring s, JNIEnv* env)
 {
-    if (!env) {
-        env = getEnv();
-        if (!env)
-            return {};
-    }
+    if (!(env = getEnv(env)))
+        return {};
     const auto result = to_string_impl(s, env);
     env->DeleteLocalRef(s);
     return result;
@@ -145,32 +144,23 @@ string to_string(jstring s, JNIEnv* env)
 
 string to_string(LocalRef&& s, JNIEnv* env)
 {
-    if (!env) {
-        env = getEnv();
-        if (!env)
-            return {};
-    }
+    if (!(env = getEnv(env)))
+        return {};
     return to_string_impl(s.get<jstring>(), env);
 }
 
 jstring from_string(const string &s, JNIEnv* env)
 {
-    if (!env) {
-        env = getEnv();
-        if (!env)
-            return nullptr;
-    }
+    if (!(env = getEnv(env)))
+        return nullptr;
     return env->NewStringUTF(s.data());
 }
 
 namespace android {
 jobject application(JNIEnv* env)
 {
-    if (!env) {
-        env = jmi::getEnv();
-        if (!env)
-            return nullptr;
-    }
+    if (!(env = getEnv(env)))
+        return nullptr;
     const LocalRef c_at = {env->FindClass("android/app/ActivityThread"), env};
     static jmethodID m_cat = env->GetStaticMethodID(c_at, "currentActivityThread", "()Landroid/app/ActivityThread;");
     static jmethodID m_ga = env->GetMethodID(c_at, "getApplication", "()Landroid/app/Application;");
@@ -183,9 +173,7 @@ namespace detail {
 // Out-of-line string concat of p0..p4 to reduce binary bloat (see declaration in jmi.h).
 string handle_exception(JNIEnv* env, const char* p0, const char* p1, const char* p2,
                         const char* p3, const char* p4) noexcept {
-    if (!env)
-        env = getEnv();
-    if (!env->ExceptionCheck())
+    if (!(env = getEnv(env)) || !env->ExceptionCheck())
         return {};
     auto ex = env->ExceptionOccurred();
     env->ExceptionDescribe(); // stderr

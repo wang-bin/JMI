@@ -47,7 +47,8 @@ using namespace std;
 
 // set JavaVM to vm if not null. return previous JavaVM
 JavaVM* javaVM(JavaVM *vm = nullptr, jint version = JNI_VERSION_1_4);
-[[nodiscard]] JNIEnv *getEnv();
+// If env is non-null, return it; otherwise resolve via GetEnv/Attach.
+[[nodiscard]] JNIEnv *getEnv(JNIEnv* env = nullptr);
 // to_string: local ref is deleted internally
 [[nodiscard]] string to_string(jstring s, JNIEnv* env = nullptr);
 // You have to call DeleteLocalRef() manually for the returned jstring
@@ -217,9 +218,8 @@ public:
     ~LocalRef() {
         if (!j_)
             return;
-        if (!env_)
-            env_ = getEnv();
-        env_->DeleteLocalRef(j_);
+        if ((env_ = getEnv(env_)))
+            env_->DeleteLocalRef(j_);
     }
 
     explicit operator bool() const { return !!j_; }
@@ -1034,11 +1034,8 @@ template<class CTag>
 JObject<CTag>& JObject<CTag>::reset(jobject obj, JNIEnv *env) {
     if (oid_ == obj) // same handle, including both null
         return *this;
-    if (!env) {
-        env = getEnv();
-        if (!env)
-            return setError("Invalid JNIEnv");
-    }
+    if (!(env = getEnv(env)))
+        return setError("Invalid JNIEnv");
     // Local and global refs to the same Java object have different handle values.
     if (oid_ && obj && env->IsSameObject(oid_, obj))
         return *this;
@@ -1057,13 +1054,11 @@ template<typename... Args>
 bool JObject<CTag>::create(Args&&... args) {
     using namespace std;
     using namespace detail;
-    JNIEnv* env = nullptr; // FIXME: why build error if let env be the last parameter of create()?
+    // FIXME: why build error if let env be the last parameter of create()?
+    JNIEnv* env = getEnv();
     if (!env) {
-        env = getEnv();
-        if (!env) {
-            setError("No JNIEnv when creating class '" + to_string(className()) + "'");
-            return false;
-        }
+        setError("No JNIEnv when creating class '" + to_string(className()) + "'");
+        return false;
     }
     const jclass cid = classId(env);
     if (!cid) {
@@ -1353,8 +1348,7 @@ JObject<CTag>::Field<F, MayBeFTag, isStaticField>::Field(jclass cid, const char*
 template<class CTag>
 jclass JObject<CTag>::classId(JNIEnv* env) {
     static const jclass c = [&]{
-        if (!env)
-            env = getEnv();
+        env = getEnv(env);
         LocalRef cid(env->FindClass(className().data()), env);
         return static_cast<jclass>(env->NewGlobalRef(cid));
     }();
@@ -1364,11 +1358,8 @@ jclass JObject<CTag>::classId(JNIEnv* env) {
 namespace detail {
     template<typename T>
     jarray to_jarray(JNIEnv* env, const T &c0, size_t N, bool is_ref) {
-        if (!env) {
-            env = getEnv();
-            if (!env)
-                return nullptr;
-        }
+        if (!(env = getEnv(env)))
+            return nullptr;
         jarray arr = nullptr;
         if (N == 0)
             arr = make_jarray(env, T(), 0);
