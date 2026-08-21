@@ -88,7 +88,7 @@ ct_string(char const (&)[N]) -> ct_string<N>;
 namespace detail {
 template<size_t N1, size_t N2, size_t... I1, size_t... I2>
 [[nodiscard]] constexpr auto ct_string_cat(ct_string<N1> a, ct_string<N2> b, index_sequence<I1...>, index_sequence<I2...>) noexcept {
-    return ct_string{array{a[I1]..., b[I2]...}};
+    return ct_string(array{a[I1]..., b[I2]...});
 }
 } // namespace detail
 
@@ -106,7 +106,15 @@ template<size_t N1, size_t N2>
     return a + ct_string(b);
 }
 
-#define JMISTR(cstr) (::jmi::ct_string{cstr})
+// cstr must be a string literal. Explicit N: GCC 10 does not CTAD on ::jmi::ct_string(...).
+// Two ways to build ct_string without qualified CTAD:
+// 1) This macro: "" cstr "" adjacent-concat — only string-literal tokens work; rejects
+//    const char* and named arrays (e.g. char const a[] = "x"; JMISTR(a) is ill-formed).
+//    No standard type trait can tell a literal from char const[N]; the concat does.
+// 2) Helper (function-template deduction): rejects pointers only; named char const[N] OK.
+//   template<size_t N> constexpr auto make_ct_string(char const (&s)[N]) noexcept { return ct_string<N>(s); }
+//   #define JMISTR(cstr) (::jmi::make_ct_string(cstr))  // JMISTR(a) above would compile
+#define JMISTR(cstr) (::jmi::ct_string<sizeof("" cstr "")>("" cstr ""))
 
 #if (JMI_CXX20 + 0)
 template<ct_string S>
