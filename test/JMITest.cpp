@@ -263,6 +263,20 @@ void test()
 	ic = jstr.call<jint,IndexOf>(std::string("c"), (jint)1);
 	TEST(ic == 2);
 	TEST(jstr.error().empty());
+#if (JMI_CXX20 + 0)
+	cout << ">>>>>>>>>>>>testing call<T, ct_string> / callStatic<T, ct_string>..." << endl;
+	TEST((jstr.call<jint, "length">() == 4));
+	TEST((jstr.call<jchar, "charAt">((jint)2) == 'c'));
+	ic = jstr.call<jint, "indexOf">(std::string("c"), (jint)1);
+	TEST(ic == 2);
+	ic = jstr.call<jint, "indexOf">(std::string("c"), (jint)1); // cached mid
+	TEST(ic == 2);
+	TEST(jstr.error().empty());
+	sss = jmi::JObject<JString>::callStatic<std::string, "valueOf">((jint)456);
+	TEST(sss == "456");
+	TEST(jstr.toString() == "abcd"); // uses call<string, "toString">
+	TEST(jstr.hashCode() != 0);
+#endif
     //jbyte ca[] = {'a', 'b', 'c', 'd'}; // why crash? why const crash?
 	jbyte *ca = (jbyte*)"abcd";
     jstr.reset();
@@ -309,6 +323,15 @@ void test()
 
 	cout << ">>>>>>>>>>>>testing Cacheable field APIs..." << endl;
 	TEST(test.create());
+#if (JMI_CXX20 + 0)
+	test.call<"setX">((jint)42);
+	TEST((test.call<jint, "getX">() == 42));
+	jmi::JObject<JMITest>::callStatic<"setY">((jfloat)604);
+	TEST((jmi::JObject<JMITest>::callStatic<jfloat, "getY">() == 604));
+	jmi::JObject<JMITest>::callStatic<"resetStatic">();
+	TEST((jmi::JObject<JMITest>::callStatic<jfloat, "getY">() == 168));
+	test.call<"setX">((jint)0); // restore for field tests below
+#endif
 	struct X : public jmi::FieldTag { static const char* name() { return "x";}};
 	int x = test.get<X, jint>();
 	TEST(x == 0);

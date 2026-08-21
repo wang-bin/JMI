@@ -90,6 +90,19 @@ If out parameter is of type `JObject<...>` or it's subclass, `std::ref()` is not
     texture.call<GetTransformMatrix>(std::ref(mat4)); // use std::ref() if parameter should be modified by jni method
 ```
 
+### C++20 NTTP (no MethodTag)
+
+With C++20, pass the method name as a `ct_string` non-type template parameter. Same caching as MethodTag; parameter order matches MethodTag overloads (`call<"name">` for void, `call<T, "name">` for a return type). Also available: `NamedClassTag<"…">`, `NamedMethodTag<"…">`, `NamedFieldTag<"…">`, and `""_jmis`.
+
+```
+    texture.call<"updateTexImage">();
+    auto t = texture.call<jlong, "getTimestamp">();
+    texture.call<"getTransformMatrix">(std::ref(mat4));
+
+    using Surface = jmi::NamedClassTag<"android/view/Surface">;
+    jmi::JObject<Surface> surface;
+```
+
 ### Field API
 
 Field api supports cacheable and uncacheable jfieldID. Field object can be JNI basic types, string, JObject and array of these types.
@@ -160,7 +173,7 @@ You may find that a macro can simplify above example:
 
 #### Compilers
 
-c++17 or later is required
+c++17 or later is required. C++20 enables NTTP APIs above (`call<"name">`, `NamedClassTag`, …).
 
 - g++ >= 7.0(except 8.0~8.3)
 - clang >= 5.0

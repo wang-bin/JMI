@@ -48,6 +48,8 @@ static_assert(CstrEq(jmi::NamedMethodTag<"toString">::name(), "toString"));
 static_assert("jmi"_jmis.size() == 4);
 static_assert(CstrEq("jmi"_jmis.data(), "jmi"));
 static_assert("java/lang/String"_jmis.size() == JMISTR("java/lang/String").size());
+// Different method names -> different NamedMethodTag types (cache key for call<T, "name">)
+static_assert(!std::is_same_v<jmi::NamedMethodTag<"length">, jmi::NamedMethodTag<"size">>);
 #endif
 static_assert(jmi::impl::operator==(ct_string("jmi"), "jmi"));
 static_assert(!jmi::impl::operator==(ct_string("jmi"), "jni"));

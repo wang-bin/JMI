@@ -89,6 +89,19 @@
     texture.call<GetTransformMatrix>(std::ref(mat4)); // use std::ref() if parameter should be modified by jni method
 ```
 
+### C++20 NTTP（无需 MethodTag）
+
+C++20 下可将方法名作为 `ct_string` 非类型模板参数传入，缓存效果与 MethodTag 相同；参数顺序与 MethodTag 重载一致（void 用 `call<"name">`，有返回值用 `call<T, "name">`）。另有 `NamedClassTag<"…">`、`NamedMethodTag<"…">`、`NamedFieldTag<"…">` 及 `""_jmis`。
+
+```
+    texture.call<"updateTexImage">();
+    auto t = texture.call<jlong, "getTimestamp">();
+    texture.call<"getTransformMatrix">(std::ref(mat4));
+
+    using Surface = jmi::NamedClassTag<"android/view/Surface">;
+    jmi::JObject<Surface> surface;
+```
+
 ### Field 接口
 
 Field 接口支持可缓存和无缓存 jfieldID
@@ -159,7 +172,7 @@ Field 接口支持可缓存和无缓存 jfieldID
 - 为了支持 jclass、jmethodID、jfieldID 缓存
 
 #### 编译器
-需要 c++17 或更高
+需要 c++17 或更高。C++20 启用上文 NTTP API（`call<"name">`、`NamedClassTag` 等）。
 
 - g++ >= 7.0(except 8.0~8.3)
 - clang >= 5.0

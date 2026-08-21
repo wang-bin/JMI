@@ -11,6 +11,17 @@
 // TODO: object convert
 // java template, e.g. Range<T>
 // https://developer.android.com/training/articles/perf-jni#threads
+//
+// Alternative ct_string design (not used): template<char... Cs> struct ct_string;
+//   Each string is a distinct type (e.g. "ok" -> ct_string<'o','k','\0'>), so MethodTag /
+//   NamedMethodTag could be omitted and the string type itself used as the cache key.
+//   Literals would come from a UDL (never hand-written char packs), e.g. "ok"_cts.
+//   Pros: works without C++20 structural NTTP; content-identity at the type level;
+//         natural fit for type-list / tag dispatch keyed by the string type.
+//   Cons: mangled names explode on long JNI signatures; heavier compile/link; pack
+//         concat / substr are noisier than array-backed ct_string<N>; overlaps what
+//         C++20 already provides via template<ct_string Name> (value NTTP) and
+//         call<T, "name">() / NamedMethodTag<"name"> below.
 #pragma once
 #include <array>
 #include <functional> // std::ref
@@ -283,6 +294,19 @@ public:
     [[nodiscard]] static T callStatic(Args&&... args);
     template<class MTag, typename... Args,  detail::if_MethodTag<MTag> = true>
     static void callStatic(Args&&... args);
+
+#if (JMI_CXX20 + 0)
+    // C++20: cache jmethodID via ct_string NTTP (same order as MethodTag overloads).
+    //   call<"updateTexImage">();  call<jlong, "getTimestamp">();
+    template<typename T, ct_string Name, typename... Args>
+    [[nodiscard]] inline T call(Args&&... args) const;
+    template<ct_string Name, typename... Args>
+    inline void call(Args&&... args) const;
+    template<typename T, ct_string Name, typename... Args>
+    [[nodiscard]] static T callStatic(Args&&... args);
+    template<ct_string Name, typename... Args>
+    static void callStatic(Args&&... args);
+#endif
 
     // get/set field and static field
     template<class FTag, typename T, detail::if_FieldTag<FTag> = true>
@@ -1059,27 +1083,43 @@ bool JObject<CTag>::create(Args&&... args) {
 
 template<class CTag>
 string JObject<CTag>::toString() const {
+#if (JMI_CXX20 + 0)
+    return call<string, "toString">();
+#else
     struct ToString : MethodTag { static const char* name() { return "toString"; }};
     return call<string, ToString>();
+#endif
 }
 
 template<class CTag>
 auto JObject<CTag>::getClass() const -> JObject<detail::JavaLangClassTag> {
+#if (JMI_CXX20 + 0)
+    return call<JObject<detail::JavaLangClassTag>, "getClass">();
+#else
     struct GetClass : MethodTag { static const char* name() { return "getClass"; }};
     return call<JObject<detail::JavaLangClassTag>, GetClass>();
+#endif
 }
 
 template<class CTag>
 jint JObject<CTag>::hashCode() const {
+#if (JMI_CXX20 + 0)
+    return call<jint, "hashCode">();
+#else
     struct HashCode : MethodTag { static const char* name() { return "hashCode"; }};
     return call<jint, HashCode>();
+#endif
 }
 
 template<class CTag>
 template<class OtherTag>
 bool JObject<CTag>::equals(const JObject<OtherTag>& other) const {
+#if (JMI_CXX20 + 0)
+    return call<jboolean, "equals">(other.id());
+#else
     struct Equals : MethodTag { static const char* name() { return "equals"; }};
     return call<jboolean, Equals>(other.id());
+#endif
 }
 
 template<class CTag>
@@ -1114,6 +1154,29 @@ void JObject<CTag>::callStatic(Args&&... args) {
     static jmethodID mid = nullptr;
     call_static_with_methodID<void>(classId(), &mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
+
+#if (JMI_CXX20 + 0)
+template<class CTag>
+template<typename T, ct_string Name, typename... Args>
+T JObject<CTag>::call(Args&&... args) const {
+    return call<T, NamedMethodTag<Name>>(std::forward<Args>(args)...);
+}
+template<class CTag>
+template<ct_string Name, typename... Args>
+void JObject<CTag>::call(Args&&... args) const {
+    call<NamedMethodTag<Name>>(std::forward<Args>(args)...);
+}
+template<class CTag>
+template<typename T, ct_string Name, typename... Args>
+T JObject<CTag>::callStatic(Args&&... args) {
+    return callStatic<T, NamedMethodTag<Name>>(std::forward<Args>(args)...);
+}
+template<class CTag>
+template<ct_string Name, typename... Args>
+void JObject<CTag>::callStatic(Args&&... args) {
+    callStatic<NamedMethodTag<Name>>(std::forward<Args>(args)...);
+}
+#endif
 
 template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>

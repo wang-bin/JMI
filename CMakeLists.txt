@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 option(BUILD_TESTS "build tests" OFF)
 
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD 20)
 elseif(CMAKE_CXX_STANDARD LESS 17)
   message(FATAL_ERROR "JMI requires C++17 or later")
 endif()
