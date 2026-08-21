@@ -583,7 +583,11 @@ constexpr auto signature_of(R (*)(Args...)) {
 }
 
 namespace detail {
-    std::string handle_exception(std::string&& msg = {}, JNIEnv* env = nullptr) noexcept;
+    // Clear pending JNI exception and build an error string. Pass message as const char* pieces (not std::string)
+    // so concatenation stays in jmi.cpp — reduces binary bloat from inlining string ops into every call_on_exit / scope_exit_handler destructor.
+    std::string handle_exception(JNIEnv* env = nullptr,
+        const char* p0 = nullptr, const char* p1 = nullptr, const char* p2 = nullptr,
+        const char* p3 = nullptr, const char* p4 = nullptr) noexcept;
 
     template<class F>
     class scope_exit_handler {
@@ -840,7 +844,7 @@ namespace detail {
         }
         JNIEnv *env = getEnv();
         const auto checker = call_on_exit([=, err_cb = std::forward<ErrCb>(err_cb)]{
-            auto ex = handle_exception(string("Failed to call method '") + name + "' with signature '" + signature + "'.", env);
+            auto ex = handle_exception(env, "Failed to call method '", name, "' with signature '", signature, ".");
             if (!ex.empty())
                 invoke_err_cb(err_cb, std::move(ex));
         });
@@ -865,7 +869,7 @@ namespace detail {
             return T();
         JNIEnv *env = getEnv();
         auto checker = call_on_exit([=, err_cb = std::forward<ErrCb>(err_cb)]{
-            auto ex = handle_exception(string("Failed to call static method '") + name + "' with signature '" + signature + "'.", env);
+            auto ex = handle_exception(env, "Failed to call static method '", name, "' with signature '", signature, ".");
             if (!ex.empty())
                 invoke_err_cb(err_cb, std::move(ex));
         });
@@ -1058,7 +1062,7 @@ bool JObject<CTag>::create(Args&&... args) {
         setError("Failed to find class '" + to_string(className()) + "'");
         return false;
     }
-    const auto checker = call_on_exit([=]{ handle_exception({}, env); });
+    const auto checker = call_on_exit([=]{ handle_exception(env); });
     static constexpr auto s = args_signature<Args...>() + signature_of(); // void
     static const jmethodID mid = env->GetMethodID(cid, "<init>", s.data()); // can be static because class id, signature and arguments combination is unique
     if (!mid) {
@@ -1184,7 +1188,7 @@ T JObject<CTag>::get() const {
     static jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([this]{
         // TODO: check fid
-        setError(detail::handle_exception(string("Failed to get field '") + FTag::name() + "' with signature '" + signature_of<T>().data() + "'."));
+        setError(detail::handle_exception(nullptr, "Failed to get field '", FTag::name(), "' with signature '", signature_of<T>().data(), "."));
     });
     return detail::get_field<T>(oid_, classId(), &fid, FTag::name());
 }
@@ -1193,7 +1197,7 @@ template<class FTag, typename T, detail::if_FieldTag<FTag>>
 bool JObject<CTag>::set(T&& v) {
     static jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([this]{
-        setError(detail::handle_exception(string("Failed to set field '") + FTag::name() + "' with signature '" + signature_of<T>().data() + "'."));
+        setError(detail::handle_exception(nullptr, "Failed to set field '", FTag::name(), "' with signature '", signature_of<T>().data(), "."));
     });
     detail::set_field<T>(oid_, classId(), &fid, FTag::name(), std::forward<T>(v));
     return true;
@@ -1248,7 +1252,7 @@ T JObject<CTag>::get(const char* fieldName) const {
     jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([fieldName, this]{
         // TODO: check fid
-        setError(detail::handle_exception(string("Failed to get field '") + fieldName + "' with signature '" + signature_of<T>().data() + "'."));
+        setError(detail::handle_exception(nullptr, "Failed to get field '", fieldName, "' with signature '", signature_of<T>().data(), "."));
     });
     return detail::get_field<T>(oid_, classId(), &fid, fieldName);
 }
@@ -1257,7 +1261,7 @@ template<typename T>
 bool JObject<CTag>::set(const char* fieldName, T&& v) {
     jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([fieldName, this]{
-        setError(detail::handle_exception(string("Failed to set field '") + fieldName + "' with signature '" + signature_of<T>().data() + "'."));
+        setError(detail::handle_exception(nullptr, "Failed to set field '", fieldName, "' with signature '", signature_of<T>().data(), "."));
     });
     detail::set_field<T>(oid_, classId(), &fid, fieldName, std::forward<T>(v));
     return true;

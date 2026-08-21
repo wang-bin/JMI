@@ -180,7 +180,9 @@ jobject application(JNIEnv* env)
 } // namespace android
 
 namespace detail {
-string handle_exception(string&& msg, JNIEnv* env) noexcept {
+// Out-of-line string concat of p0..p4 to reduce binary bloat (see declaration in jmi.h).
+string handle_exception(JNIEnv* env, const char* p0, const char* p1, const char* p2,
+                        const char* p3, const char* p4) noexcept {
     if (!env)
         env = getEnv();
     if (!env->ExceptionCheck())
@@ -199,7 +201,12 @@ string handle_exception(string&& msg, JNIEnv* env) noexcept {
             return call<string, MT>();
         }
     };
-    return std::move(msg) + " Exception: " + Throwable(ex).getMessage();
+    string msg;
+    for (auto* p : {p0, p1, p2, p3, p4}) {
+        if (p && *p)
+            msg += p;
+    }
+    return msg + " Exception: " + Throwable(ex).getMessage();
 }
 
 template<>
