@@ -712,7 +712,7 @@ namespace detail {
     //template<typename T, size_t N> void from_jvalue(JNIEnv* env, const jvalue& v, T(&t)[N]) { from_jarray(env, v, t, N); }
 
     template<typename T>
-    inline constexpr bool has_local_ref_v = !is_arithmetic_v<T> && !is_pointer_v<T> && !is_JObject_v<T>; // is_jobject<T>? is_jarray_cpp?
+    inline constexpr bool has_local_ref_v = !is_arithmetic_v<T> && !is_enum_v<T> && !is_pointer_v<T> && !is_JObject_v<T>; // is_jobject<T>? is_jarray_cpp?
     template<typename T>
     void set_ref_from_jvalue(JNIEnv* env, jvalue* jargs, T, bool) {
         using Tn = remove_reference_t<T>;
