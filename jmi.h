@@ -106,7 +106,10 @@ template<size_t N1, size_t N2>
     return a + ct_string(b);
 }
 
-#define JMISTR(cstr) (::jmi::ct_string{cstr})
+template<size_t N>
+[[nodiscard]] constexpr ct_string<N> make_ct_string(char const (&s)[N]) noexcept { return ct_string<N>(s); }
+
+#define JMISTR(cstr) (::jmi::make_ct_string(cstr))
 
 #if (JMI_CXX20 + 0)
 template<ct_string S>
