@@ -17,6 +17,35 @@
 using namespace std;
 using namespace jmi;
 
+void test_concurrent_method_first_access()
+{
+	struct GetX : MethodTag { static const char* name() { return "getX"; } };
+	struct GetY : MethodTag { static const char* name() { return "getY"; } };
+	constexpr int worker_count = 8;
+	JObject<JMITestClassTag> base;
+	TEST(base.create());
+	atomic<int> ready{0};
+	atomic<bool> start{false};
+	vector<future<bool>> workers;
+	workers.reserve(worker_count);
+	for (int i = 0; i < worker_count; ++i) {
+		workers.emplace_back(async(launch::async, [&] {
+			JObject<JMITestClassTag> obj = base;
+			ready.fetch_add(1, memory_order_release);
+			while (!start.load(memory_order_acquire))
+				this_thread::yield();
+			const auto x = obj.call<jint, GetX>();
+			const auto y = JObject<JMITestClassTag>::callStatic<jfloat, GetY>();
+			return x == 0 && y == 168;
+		}));
+	}
+	while (ready.load(memory_order_acquire) != worker_count)
+		this_thread::yield();
+	start.store(true, memory_order_release);
+	for (auto& worker : workers)
+		TEST(worker.get());
+}
+
 void test_concurrent_static_field_first_access()
 {
 	struct Y : FieldTag { static const char* name() { return "y"; } };
@@ -476,6 +505,7 @@ void test()
 }
 
 void run() {
+	test_concurrent_method_first_access();
 	test_concurrent_static_field_first_access();
 	auto fut = async(launch::async, []{
 		test();

@@ -162,8 +162,8 @@ jobject application(JNIEnv* env)
     if (!(env = getEnv(env)))
         return nullptr;
     const LocalRef c_at = {env->FindClass("android/app/ActivityThread"), env};
-    static jmethodID m_cat = env->GetStaticMethodID(c_at, "currentActivityThread", "()Landroid/app/ActivityThread;");
-    static jmethodID m_ga = env->GetMethodID(c_at, "getApplication", "()Landroid/app/Application;");
+    static const jmethodID m_cat = env->GetStaticMethodID(c_at, "currentActivityThread", "()Landroid/app/ActivityThread;");
+    static const jmethodID m_ga = env->GetMethodID(c_at, "getApplication", "()Landroid/app/Application;");
     const LocalRef at = {env->CallStaticObjectMethod(c_at, m_cat), env};
     return env->CallObjectMethod(at, m_ga);
 }

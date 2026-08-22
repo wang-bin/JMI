@@ -844,7 +844,7 @@ namespace detail {
     }
 
     template<typename T, typename ErrCb, typename... Args>
-    T call_with_methodID(jobject oid, jclass cid, jmethodID* pmid, ErrCb&& err_cb, const char* signature, const char* name, Args&&... args) {
+    T call_with_methodID(jobject oid, jclass cid, jmethodID mid, ErrCb&& err_cb, const char* signature, const char* name, Args&&... args) {
         invoke_err_cb(err_cb, string());
         if (!cid)
             return T();
@@ -858,14 +858,6 @@ namespace detail {
             if (!ex.empty())
                 invoke_err_cb(err_cb, std::move(ex));
         });
-        jmethodID mid = nullptr;
-        if (pmid)
-            mid = *pmid;
-        if (!mid) {
-            mid = env->GetMethodID(cid, name, signature);
-            if (pmid)
-                *pmid = mid;
-        }
         if (!mid || env->ExceptionCheck())
             return T();
         auto jargs = make_jargs(env, std::forward<Args>(args)...);
@@ -873,7 +865,7 @@ namespace detail {
     }
 
     template<typename T, typename ErrCb, typename... Args>
-    T call_static_with_methodID(jclass cid, jmethodID* pmid, ErrCb&& err_cb, const char* signature, const char* name, Args&&... args) {
+    T call_static_with_methodID(jclass cid, jmethodID mid, ErrCb&& err_cb, const char* signature, const char* name, Args&&... args) {
         invoke_err_cb(err_cb, string());
         if (!cid)
             return T();
@@ -883,14 +875,6 @@ namespace detail {
             if (!ex.empty())
                 invoke_err_cb(err_cb, std::move(ex));
         });
-        jmethodID mid = nullptr;
-        if (pmid)
-            mid = *pmid;
-        if (!mid) {
-            mid = env->GetStaticMethodID(cid, name, signature);
-            if (pmid)
-                *pmid = mid;
-        }
         if (!mid || env->ExceptionCheck())
             return T();
         auto jargs = make_jargs(env, std::forward<Args>(args)...);
@@ -1106,32 +1090,40 @@ template<typename T, class MTag, typename... Args, detail::if_MethodTag<MTag>>
 T JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
     static constexpr auto s = args_signature<Args...>() + signature_of_no_ptr<add_pointer_t<T>>();
-    static jmethodID mid = nullptr;
-    return call_with_methodID<T>(oid_, classId(), &mid, [this](string&& err){ setError(std::move(err));}, s.data(), MTag::name(), std::forward<Args>(args)...);
+    static const jmethodID mid = [] {
+        return getEnv()->GetMethodID(classId(), MTag::name(), s.data());
+    }();
+    return call_with_methodID<T>(oid_, classId(), mid, [this](string&& err){ setError(std::move(err));}, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<class MTag, typename... Args, detail::if_MethodTag<MTag>>
 void JObject<CTag>::call(Args&&... args) const {
     using namespace detail;
     static constexpr auto s = args_signature<Args...>() + signature_of();
-    static jmethodID mid = nullptr;
-    call_with_methodID<void>(oid_, classId(), &mid, [this](string&& err){ setError(std::move(err));}, s.data(), MTag::name(), std::forward<Args>(args)...);
+    static const jmethodID mid = [] {
+        return getEnv()->GetMethodID(classId(), MTag::name(), s.data());
+    }();
+    call_with_methodID<void>(oid_, classId(), mid, [this](string&& err){ setError(std::move(err));}, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
 T JObject<CTag>::callStatic(Args&&... args) {
     using namespace detail;
     static constexpr auto s = args_signature<Args...>() + signature_of_no_ptr<add_pointer_t<T>>();
-    static jmethodID mid = nullptr;
-    return call_static_with_methodID<T>(classId(), &mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
+    static const jmethodID mid = [] {
+        return getEnv()->GetStaticMethodID(classId(), MTag::name(), s.data());
+    }();
+    return call_static_with_methodID<T>(classId(), mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<class MTag, typename... Args,  detail::if_MethodTag<MTag>>
 void JObject<CTag>::callStatic(Args&&... args) {
     using namespace detail;
     static constexpr auto s = args_signature<Args...>() + signature_of();
-    static jmethodID mid = nullptr;
-    call_static_with_methodID<void>(classId(), &mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
+    static const jmethodID mid = [] {
+        return getEnv()->GetStaticMethodID(classId(), MTag::name(), s.data());
+    }();
+    call_static_with_methodID<void>(classId(), mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 
 #if (JMI_CXX20 + 0)
@@ -1205,28 +1197,36 @@ template<typename T, typename... Args, detail::if_not_MethodTag<T>>
 T JObject<CTag>::call(const char* methodName, Args&&... args) const {
     using namespace detail;
     static constexpr auto s = args_signature<Args...>() + signature_of_no_ptr<add_pointer_t<T>>();
-    return call_with_methodID<T>(oid_, classId(), nullptr, [this](string&& err){ setError(std::move(err));}, s.data(), methodName, std::forward<Args>(args)...);
+    const jclass cid = classId();
+    const jmethodID mid = cid && oid_ ? getEnv()->GetMethodID(cid, methodName, s.data()) : nullptr;
+    return call_with_methodID<T>(oid_, cid, mid, [this](string&& err){ setError(std::move(err));}, s.data(), methodName, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename... Args>
 void JObject<CTag>::call(const char* methodName, Args&&... args) const {
     using namespace detail;
     static constexpr auto s = args_signature<Args...>() + signature_of();
-    call_with_methodID<void>(oid_, classId(), nullptr, [this](string&& err){ setError(std::move(err));}, s.data(), methodName, std::forward<Args>(args)...);
+    const jclass cid = classId();
+    const jmethodID mid = cid && oid_ ? getEnv()->GetMethodID(cid, methodName, s.data()) : nullptr;
+    call_with_methodID<void>(oid_, cid, mid, [this](string&& err){ setError(std::move(err));}, s.data(), methodName, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename T, typename... Args, detail::if_not_MethodTag<T>>
 T JObject<CTag>::callStatic(const char* name, Args&&... args) {
     using namespace detail;
     static constexpr auto s = args_signature<Args...>() + signature_of_no_ptr<add_pointer_t<T>>();
-    return call_static_with_methodID<T>(classId(), nullptr, nullptr, s.data(), name, std::forward<Args>(args)...);
+    const jclass cid = classId();
+    const jmethodID mid = cid ? getEnv()->GetStaticMethodID(cid, name, s.data()) : nullptr;
+    return call_static_with_methodID<T>(cid, mid, nullptr, s.data(), name, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename... Args>
 void JObject<CTag>::callStatic(const char* name, Args&&... args) {
     using namespace detail;
     static constexpr auto s = args_signature<Args...>() + signature_of();
-    call_static_with_methodID<void>(classId(), nullptr, nullptr, s.data(), name, std::forward<Args>(args)...);
+    const jclass cid = classId();
+    const jmethodID mid = cid ? getEnv()->GetStaticMethodID(cid, name, s.data()) : nullptr;
+    call_static_with_methodID<void>(cid, mid, nullptr, s.data(), name, std::forward<Args>(args)...);
 }
 
 template<class CTag>
