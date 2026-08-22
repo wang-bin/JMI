@@ -1,5 +1,6 @@
 //#include <valarray>
 #include <jni.h>
+#include <atomic>
 #include <iostream>
 #include <future>
 #include <thread>
@@ -15,6 +16,34 @@
 
 using namespace std;
 using namespace jmi;
+
+void test_concurrent_static_field_first_access()
+{
+	struct Y : FieldTag { static const char* name() { return "y"; } };
+	struct SStr : FieldTag { static const char* name() { return "sstr"; } };
+	constexpr int worker_count = 8;
+	atomic<int> ready{0};
+	atomic<bool> start{false};
+	vector<future<bool>> workers;
+	workers.reserve(worker_count);
+	for (int i = 0; i < worker_count; ++i) {
+		workers.emplace_back(async(launch::async, [&] {
+			ready.fetch_add(1, memory_order_release);
+			while (!start.load(memory_order_acquire))
+				this_thread::yield();
+			if (!JObject<JMITestClassTag>::setStatic<Y>(jfloat{168}))
+				return false;
+			const auto y = JObject<JMITestClassTag>::getStatic<Y, jfloat>();
+			const auto sstr = JObject<JMITestClassTag>::staticField<SStr, string>().get();
+			return y == 168 && sstr == "static text";
+		}));
+	}
+	while (ready.load(memory_order_acquire) != worker_count)
+		this_thread::yield();
+	start.store(true, memory_order_release);
+	for (auto& worker : workers)
+		TEST(worker.get());
+}
 
 void JMITestCached::resetStatic()
 {
@@ -447,6 +476,7 @@ void test()
 }
 
 void run() {
+	test_concurrent_static_field_first_access();
 	auto fut = async(launch::async, []{
 		test();
 	});

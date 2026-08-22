@@ -898,9 +898,6 @@ namespace detail {
     }
 
 
-    template<typename T>
-    jfieldID get_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid = nullptr);
-
     template<class T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
     T get_field(JNIEnv* env, jobject oid, jfieldID fid);
     template<class T, if_JObject<T> = true>
@@ -925,10 +922,10 @@ namespace detail {
     }
 
     template<typename T>
-    T get_field(jobject oid, jclass cid, jfieldID* pfid, const char* name) {
+    T get_field(jobject oid, jclass cid, const char* name) {
         JNIEnv* env = getEnv();
         // TODO: call_on_exit?
-        jfieldID fid = get_field_id<T>(env, cid, name, pfid);
+        jfieldID fid = env->GetFieldID(cid, name, signature_of<T>().data());
         if (!fid) // no exception check, already exist in get()? what about call?
             return T();
         return get_field<T>(env, oid, fid);
@@ -936,17 +933,15 @@ namespace detail {
     template<class T>
     void set_field(JNIEnv* env, jobject oid, jfieldID fid, T&& v);
     template<typename T>
-    void set_field(jobject oid, jclass cid, jfieldID* pfid, const char* name, T&& v) {
+    void set_field(jobject oid, jclass cid, const char* name, T&& v) {
         JNIEnv* env = getEnv();
         // TODO: call_on_exit?
-        jfieldID fid = get_field_id<T>(env, cid, name, pfid);
+        jfieldID fid = env->GetFieldID(cid, name, signature_of<T>().data());
         if (!fid)
             return;
         set_field<T>(env, oid, fid, std::forward<T>(v));
     }
 
-    template<typename T>
-    jfieldID get_static_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid = nullptr);
     template<typename T, if_not_JObject<T> = true, if_not_jarray_cpp<T> = true>
     T get_static_field(JNIEnv* env, jclass cid, jfieldID fid);
     template<class T, if_JObject<T> = true>
@@ -971,9 +966,9 @@ namespace detail {
     }
 
     template<typename T>
-    T get_static_field(jclass cid, jfieldID* pfid, const char* name) {
+    T get_static_field(jclass cid, const char* name) {
         JNIEnv* env = getEnv();
-        jfieldID fid = get_static_field_id<T>(env, cid, name, pfid);
+        jfieldID fid = env->GetStaticFieldID(cid, name, signature_of<T>().data());
         if (!fid)
             return T();
         return get_static_field<T>(env, cid, fid);
@@ -981,37 +976,12 @@ namespace detail {
     template<typename T>
     void set_static_field(JNIEnv* env, jclass cid, jfieldID fid, T&& v);
     template<typename T>
-    void set_static_field(jclass cid, jfieldID* pfid, const char* name, T&& v) {
+    void set_static_field(jclass cid, const char* name, T&& v) {
         JNIEnv* env = getEnv();
-        jfieldID fid = get_static_field_id<T>(env, cid, name, pfid);
+        jfieldID fid = env->GetStaticFieldID(cid, name, signature_of<T>().data());
         if (!fid)
             return;
         set_static_field<T>(env, cid, fid, std::forward<T>(v));
-    }
-
-    template<typename T>
-    jfieldID get_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid) {
-        jfieldID fid = nullptr;
-        if (pfid)
-            fid = *pfid;
-        if (!fid) {
-            fid = env->GetFieldID(cid, name, signature_of<T>().data());
-            if (pfid)
-                *pfid = fid;
-        }
-        return fid;
-    }
-    template<typename T>
-    jfieldID get_static_field_id(JNIEnv* env, jclass cid, const char* name, jfieldID* pfid) {
-        jfieldID fid = nullptr;
-        if (pfid)
-            fid = *pfid;
-        if (!fid) {
-            fid = env->GetStaticFieldID(cid, name, signature_of<T>().data());
-            if (pfid)
-                *pfid = fid;
-        }
-        return fid;
     }
 } // namespace detail
 
@@ -1190,34 +1160,42 @@ void JObject<CTag>::callStatic(Args&&... args) {
 template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
 T JObject<CTag>::get() const {
-    static jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([this]{
         // TODO: check fid
         setError(detail::handle_exception(nullptr, "Failed to get field '", FTag::name(), "' with signature '", signature_of<T>().data(), "."));
     });
-    return detail::get_field<T>(oid_, classId(), &fid, FTag::name());
+    static const jfieldID fid = [] {
+        return getEnv()->GetFieldID(classId(), FTag::name(), signature_of<T>().data());
+    }();
+    return detail::get_field<T>(getEnv(), oid_, fid);
 }
 template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
 bool JObject<CTag>::set(T&& v) {
-    static jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([this]{
         setError(detail::handle_exception(nullptr, "Failed to set field '", FTag::name(), "' with signature '", signature_of<T>().data(), "."));
     });
-    detail::set_field<T>(oid_, classId(), &fid, FTag::name(), std::forward<T>(v));
+    static const jfieldID fid = [] {
+        return getEnv()->GetFieldID(classId(), FTag::name(), signature_of<T>().data());
+    }();
+    detail::set_field<T>(getEnv(), oid_, fid, std::forward<T>(v));
     return true;
 }
 template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
 T JObject<CTag>::getStatic() {
-    static jfieldID fid = nullptr;
-    return detail::get_static_field<T>(classId(), &fid, FTag::name());
+    static const jfieldID fid = [] {
+        return getEnv()->GetStaticFieldID(classId(), FTag::name(), signature_of<T>().data());
+    }();
+    return detail::get_static_field<T>(getEnv(), classId(), fid);
 }
 template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
 bool JObject<CTag>::setStatic(T&& v) {
-    static jfieldID fid = nullptr;
-    detail::set_static_field<T>(classId(), &fid, FTag::name(), std::forward<T>(v));
+    static const jfieldID fid = [] {
+        return getEnv()->GetStaticFieldID(classId(), FTag::name(), signature_of<T>().data());
+    }();
+    detail::set_static_field<T>(getEnv(), classId(), fid, std::forward<T>(v));
     return true;
 }
 
@@ -1254,34 +1232,30 @@ void JObject<CTag>::callStatic(const char* name, Args&&... args) {
 template<class CTag>
 template<typename T>
 T JObject<CTag>::get(const char* fieldName) const {
-    jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([fieldName, this]{
         // TODO: check fid
         setError(detail::handle_exception(nullptr, "Failed to get field '", fieldName, "' with signature '", signature_of<T>().data(), "."));
     });
-    return detail::get_field<T>(oid_, classId(), &fid, fieldName);
+    return detail::get_field<T>(oid_, classId(), fieldName);
 }
 template<class CTag>
 template<typename T>
 bool JObject<CTag>::set(const char* fieldName, T&& v) {
-    jfieldID fid = nullptr;
     auto checker = detail::call_on_exit([fieldName, this]{
         setError(detail::handle_exception(nullptr, "Failed to set field '", fieldName, "' with signature '", signature_of<T>().data(), "."));
     });
-    detail::set_field<T>(oid_, classId(), &fid, fieldName, std::forward<T>(v));
+    detail::set_field<T>(oid_, classId(), fieldName, std::forward<T>(v));
     return true;
 }
 template<class CTag>
 template<typename T>
 T JObject<CTag>::getStatic(const char* fieldName) {
-    jfieldID fid = nullptr;
-    return detail::get_static_field<T>(classId(), &fid, fieldName);
+    return detail::get_static_field<T>(classId(), fieldName);
 }
 template<class CTag>
 template<typename T>
 bool JObject<CTag>::setStatic(const char* fieldName, T&& v) {
-    jfieldID fid = nullptr;
-    detail::set_static_field<T>(classId(), &fid, fieldName, std::forward<T>(v));
+    detail::set_static_field<T>(classId(), fieldName, std::forward<T>(v));
     return true;
 }
 
@@ -1315,13 +1289,12 @@ template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
 jfieldID JObject<CTag>::Field<F, MayBeFTag, isStaticField>::cachedId(jclass cid)
 {
-    static jfieldID fid = nullptr;
-    if (!fid) {
+    static const jfieldID fid = [cid] {
         if constexpr (isStaticField)
-            fid = detail::get_static_field_id<F>(getEnv(), cid, MayBeFTag::name());
+            return getEnv()->GetStaticFieldID(cid, MayBeFTag::name(), signature_of<F>().data());
         else
-            fid = detail::get_field_id<F>(getEnv(), cid, MayBeFTag::name());
-    }
+            return getEnv()->GetFieldID(cid, MayBeFTag::name(), signature_of<F>().data());
+    }();
     return fid;
 }
 
@@ -1339,10 +1312,10 @@ template<typename F, class MayBeFTag, bool isStaticField>
 JObject<CTag>::Field<F, MayBeFTag, isStaticField>::Field(jclass cid, const char* name, jobject oid)
  : oid_(oid) {
     if constexpr (isStaticField) {
-        fid_ = detail::get_static_field_id<F>(getEnv(), cid, name);
+        fid_ = getEnv()->GetStaticFieldID(cid, name, signature_of<F>().data());
         cid_ = cid;
     } else {
-        fid_ = detail::get_field_id<F>(getEnv(), cid, name);
+        fid_ = getEnv()->GetFieldID(cid, name, signature_of<F>().data());
     }
 }
 
