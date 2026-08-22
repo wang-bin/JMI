@@ -246,9 +246,11 @@ public:
 
     // construct from an existing jobject. Usually obj is from native jni api containing a local ref, and it's local ref will be deleted if del_localref is true
     JObject(jobject obj = nullptr, bool del_localref = true) {
+        if (!obj)
+            return;
         JNIEnv *env = getEnv();
         reset(obj, env);
-        if (obj && del_localref)
+        if (del_localref)
             env->DeleteLocalRef(obj);
     }
     JObject(LocalRef&& ref) : JObject((jobject)ref, false) {}
