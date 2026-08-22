@@ -7,180 +7,178 @@
 
 [![Build status github](https://github.com/wang-bin/JMI/workflows/Build/badge.svg)](https://github.com/wang-bin/JMI/actions)
 
-### 特性
+## 特性
 
-- 编译期计算出签名常量(C++17)
-- 支持 Java 方法输入、输出参数
-- jclass、jmethodID、field 自动缓存
-- C++ 和 Java 方法属性一致，如静态方法对应 C++ 静态成员函数
-- 无需操心局部引用泄漏
-- getEnv() 支持任意线程，无需关心 detach
-- 编译器推导 java 类型及方法签名，并只生成一次
-- 支持 JNI 原生的基本类型(jint、jlong之类而不是int、long)、jmi 的 JObject、C/C++ string 及上述类型的数组形式(vector, valarray, array等) 作为函数参数、返回值及 field 类型
-- 提供了方便使用的常用函数: `to_string(jstring, JNIEnv*)`, `from_string(std::string, JNIEnv*)`, `android::application()`
-- 简单易用，用户代码极简
+- 编译期 JNI 签名常量
+- 支持 Java 方法入参与出参（可变数组/缓冲区用 `std::ref`）
+- 按类缓存 `jclass`，按方法/字段缓存 `jmethodID` / `jfieldID`
+- Java 静态方法/字段提供对应的 `callStatic` / `staticField` 接口
+- `JObject` 持有 **global** ref；短生命周期可用 `LocalRef` RAII（一致使用可避免局部引用泄漏）
+- 在 `javaVM(vm)` 初始化后支持任意线程调用 `getEnv()`，按需 attach/detach
+- 可作为参数 / 返回值 / field 的类型：JNI 基本类型（`jint`、`jlong` 等，不是裸 `int`/`long`）、`JObject`、C/C++ string 及其数组
+- 常用辅助：`to_string(jstring, JNIEnv*)`、`from_string(std::string, JNIEnv*)`、`android::application()`
+- 每次调用做异常检查/清理；实例方法之后可查 `error()`
+- 缓存 ID 并开启 LTO 时，几乎没有额外的 C++ 包装开销
 
-### 例子:
-- `JNI_OnLoad` 中设置 java vm: `jmi::javaVM(vm);`
+## 快速开始
 
-- 创建 SurfaceTexture:
-```
-    // 在任意 jmi::JObject<SurfaceTexture> 可见范围内定义 SurfaceTexture tag 类
-    struct SurfaceTexture : jmi::ClassTag { static constexpr auto name() {return JMISTRM("android/graphics/SurfaceTexture");}}; // 或 JMISTR("android.graphics.SurfaceTexture")
-    ...
-    GLuint tex = ...
-    ...
-    jmi::JObject<SurfaceTexture> texture;
-    if (!texture.create(tex)) {
-        // texture.error() ...
-    }
+在 `JNI_OnLoad` 中设置 VM：
+
+```cpp
+jmi::javaVM(vm);
 ```
 
-- 从 SurfaceTexture 构造 Surface:
-```
-    struct Surface : jmi::ClassTag { static constexpr auto name() {return JMISTR("android.view.Surface");}}; // '.' or '/'
-    ...
-    jmi::JObject<Surface> surface;
-    surface.create(texture);
-```
+请在任何 JMI API 之前调用，通常放在 `JNI_OnLoad` 中。
 
-- 调用 void 方法:
-```
-    texture.call("updateTexImage");
-```
+### 缓存方法
 
-或
+用方法名做模板参数（C++20 NTTP 或 `MethodTag`）的 `call<…>` / `callStatic<…>` 会缓存 `jmethodID`，只解析一次。热路径请优先使用。
 
-```
-    texture.call<void>("updateTexImage");
-```
+**C++20** — `NamedClassTag`、`call<"name">`、`NamedMethodTag`、`NamedFieldTag`、`""_jmis`：
 
-- 调用含输出参数的方法:
-```
-    float mat4[16]; // or std::array<float, 16>, valarray<float>
-    texture.call("getTransformMatrix", std::ref(mat4)); // use std::ref() if parameter should be modified by jni method
-```
+```cpp
+using SurfaceTexture = jmi::NamedClassTag<"android/graphics/SurfaceTexture">;
+jmi::JObject<SurfaceTexture> texture;
+if (!texture.create(tex)) {
+    // texture.error()
+}
+texture.call<"updateTexImage">();
+auto t = texture.call<jlong, "getTimestamp">();
 
-若出参类型是 `JObject<...>` 或其子类, 则可不使用`std::ref()`，因为对象不会改变，可能只是某些fields被方法修改了，如
+float mat4[16]; // 或 std::array / valarray
+texture.call<"getTransformMatrix">(std::ref(mat4)); // std::ref = 出参 / 出入参
 
-```
-    MediaCodec::BufferInfo bi;
-    bi.create();
-    codec.dequeueOutputBuffer(bi, timeout); // bi is of type MediaCodec::BufferInfo&
+using Surface = jmi::NamedClassTag<"android/view/Surface">;
+jmi::JObject<Surface> surface;
+surface.create(texture);
 ```
 
-- 调用有返回值的方法:
-```
-    auto t = texture.call<jlong>("getTimestamp");
-```
+**ClassTag + MethodTag** — 不用 C++20 字符串 NTTP，缓存效果相同：
 
-## jmethodID 缓存
+```cpp
+struct SurfaceTexture : jmi::ClassTag {
+    static constexpr auto name() { return JMISTR("android/graphics/SurfaceTexture"); } // 或 JMISTR("android.graphics.SurfaceTexture")
+};
+struct UpdateTexImage : jmi::MethodTag { static const char* name() { return "updateTexImage"; } };
+struct GetTimestamp : jmi::MethodTag { static const char* name() { return "getTimestamp"; } };
+struct GetTransformMatrix : jmi::MethodTag { static const char* name() { return "getTransformMatrix"; } };
 
-`call/callStatic("methodName", ....)` 每次都会调用 `GetMethodID/GetStaticMethodID()`, 而 `call/callStatic<...MTag>(...)` 只会调用一次, 其中 `MTag` 是 `jmi:MethodTag` 的子类，实现了 `static const char* name() { return "methodName";}`.
-
-```
-    // GetMethodID() 对于每个不同的方法只会被调用一次
-    struct UpdateTexImage : jmi::MethodTag { static const char* name() {return "updateTexImage";}};
-    struct GetTimestamp : jmi::MethodTag { static const char* name() {return "getTimestamp";}};
-    struct GetTransformMatrix : jmi::MethodTag { static const char* name() {return "getTransformMatrix";}};
-    ...
-    texture.call<UpdateTexImage>(); // or texture.call<void,UpdateTexImage>();
-    auto t = texture.call<jlong, GetTimestamp>();
-    texture.call<GetTransformMatrix>(std::ref(mat4)); // use std::ref() if parameter should be modified by jni method
-```
-
-### C++20 NTTP（无需 MethodTag）
-
-C++20 下可将方法名作为 `ct_string` 非类型模板参数传入，缓存效果与 MethodTag 相同；参数顺序与 MethodTag 重载一致（void 用 `call<"name">`，有返回值用 `call<T, "name">`）。另有 `NamedClassTag<"…">`、`NamedMethodTag<"…">`、`NamedFieldTag<"…">` 及 `""_jmis`。
-
-```
-    texture.call<"updateTexImage">();
-    auto t = texture.call<jlong, "getTimestamp">();
-    texture.call<"getTransformMatrix">(std::ref(mat4));
-
-    using Surface = jmi::NamedClassTag<"android/view/Surface">;
-    jmi::JObject<Surface> surface;
+jmi::JObject<SurfaceTexture> texture;
+if (!texture.create(tex)) {
+    // texture.error()
+}
+texture.call<UpdateTexImage>();
+auto t = texture.call<jlong, GetTimestamp>();
+texture.call<GetTransformMatrix>(std::ref(mat4));
 ```
 
-### Field 接口
+### 无缓存的字符串方法名（热路径请避免）
 
-Field 接口支持可缓存和无缓存 jfieldID
+`call("name", …)` / `callStatic("name", …)` **每次**都会 `GetMethodID` / `GetStaticMethodID`。热路径请用 `call<"name">` 或 `MethodTag`。
 
-通过 FieldTag 使用可缓存 jfieldID
-
-```
-    JObject<MyClassTag> obj;
-    ...
-    struct MyIntField : FieldTag { static const char* name() {return "myIntFieldName";} };
-    auto ifield = obj.field<jint, MyIntField>();
-    jfieldID ifid = ifield; // 或 ifield.id()
-    ifield.set(1234);
-    jint ivalue = ifield; // 或 ifield.get();
-
-    // 静态 field 也一样，除了使用的是静态方法 JObject::staticField
-    struct MyStrFieldS : FieldTag { static const char* name() {return "myStaticStrFieldName";} };
-    auto& ifields = JObject<MyClassTag>::staticField<std::string, MyIntFieldS>(); // it can be an ref
-    jfieldID ifids = ifields; // 或 ifield.id()
-    ifields.set("JMI static field test");
-    ifields = "assign";
-    std::string ivalues = ifields; // 或 ifield.get();
+```cpp
+texture.call("updateTexImage");
+auto t = texture.call<jlong>("getTimestamp");
 ```
 
-通过 field 名字使用无缓存 jfieldID
+### 运行时开销
 
-```
-    auto ifield = obj.field<jint>("myIntFieldName");
-    ...
-```
+对于已缓存的方法和字段，JMI 只在首次使用时解析 ID。后续调用仍会执行 `getEnv()`、JNI 异常检查、参数/引用转换以及 JNI 调用本身。开启 LTO 后，C++ 包装层通常可以被内联，因此相比等价的手写 JNI，额外的包装开销几乎为零；JNI 操作和引用管理本身仍有正常成本。
 
-### 给 Java 类写个 C++ 类
+## 线程与生命周期
 
-创建 JObject<YouClassTag> 或把其对象作为成员变量，或使用 CRTP JObject<YouClass>。 每个方法是想通常不超过3行代码，也可以使用一些宏使每个方法实现只需一行代码， 参见 [JMITest](test/JMITest.h) 及  [Project AND](https://github.com/wang-bin/AND.git)
+- `JNIEnv*`、local `jobject` 引用和 `LocalRef` 都属于创建它们的线程，不能传给其他线程；跨线程应使用 `JObject` 这样的 global ref。
+- `JObject` 持有 global ref，允许复制，但同一个 `JObject` 实例不是带同步的共享对象。建议每个线程使用自己的包装对象，或由外部同步访问。
+- 非静态 `Field` 不持有额外的对象引用。使用它时，所属的 `JObject` 必须保持有效且不能被 `reset()`。
+- JMI 会在线程退出时 detach 自己 attach 的 native 线程；由调用方 attach 的线程仍由调用方管理。
 
-### 使用编译器生成的签名
+### 出参
 
-模版 `auto signature_of<T>()` 返回类型 T 的签名. T 可以是 JMI 支持的类型(除了jobject，因为其类型是运行时确定的）、reference_wrapper、void 及由以上类型作为返回类型和参数类型的函数类型
+需要 JNI 改写 C++ 数组/缓冲区时用 `std::ref`。参数若是 `JObject`（或其子类），一般不必 `std::ref`——句柄不变，可能只改字段：
 
-
-例子:
-
-```
-    void native_test_impl(JNIEnv *env , jobject thiz, ...) {}
-
-    staitc const JNINativeMethod gMethods[] = {
-        {"native_test", signature_of(native_test_impl).data(), native_test_impl},
-        ...
-    };
+```cpp
+MediaCodec::BufferInfo bi;
+bi.create();
+codec.dequeueOutputBuffer(bi, timeout); // bi 为 MediaCodec::BufferInfo&
 ```
 
-也许你发现了可以用宏来简化
+### 错误
 
+`JObject::call`、`get` 和 `set` 在每次调用开始会清空 `error()`，若检测到 JNI 异常或失败再写入。错误属于该对象实例，并会被下一次实例调用覆盖，因此应及时检查。`create()` 也会通过返回值和 `error()` 报告失败。
+
+### 引用
+
+- `JObject` 存的是 **global** ref（`NewGlobalRef` / `DeleteGlobalRef`）。复制 `JObject` 会创建另一个 global ref；从 call 返回 `JObject` 比短命 local ref 更重。
+- `jmi::LocalRef` 析构时删除 local ref，且必须在创建它的线程析构。
+- `to_string(jstring)` 会删掉传入的 local ref；`from_string` / `android::application()` 返回当前线程的 local ref，需自行管理（或包进 `LocalRef`）。
+
+## Field 接口
+
+`FieldTag` / C++20 `NamedFieldTag<"…">` 会在函数内静态缓存 ID。`obj.field<T>("name")` 和 `staticField<T>("name")` 在构造 `Field` 对象时查找 ID，并由该对象保存。直接调用 `obj.get<T>("name")` / `set()` / `getStatic()` / `setStatic()` 时，每次调用都会查找字段 ID。
+
+```cpp
+// C++20
+auto ifield = obj.field<jint, jmi::NamedFieldTag<"myIntFieldName">>();
+jfieldID ifid = ifield; // 或 ifield.id()
+ifield.set(1234);
+jint ivalue = ifield; // 或 ifield.get()
+
+struct MyStrFieldS : jmi::FieldTag { static const char* name() { return "myStaticStrFieldName"; } };
+auto& sfield = JObject<MyClassTag>::staticField<std::string, MyStrFieldS>();
+sfield.set("JMI static field test");
+sfield = "assign";
+std::string s = sfield;
+
+auto plain = obj.field<jint>("myIntFieldName"); // 为此 Field 对象查找一次
 ```
-    #define DEFINE_METHOD(M) {#M, signature_of(M##_impl).data(), M##_impl}
-    staitc const JNINativeMethod gMethods[] = {
-        DEFINE_METHOD(native_test),
-        ...
-    }
+
+## 给 Java 类写 C++ 包装
+
+继承 `JObject<YourClass>`（CRTP）或 `JObject<YourClassTag>`，或把 `JObject` 当成员。每个方法通常几行即可。参见 [JMITest](test/JMITest.h) 与 [Project AND](https://github.com/wang-bin/AND.git)。
+
+## 使用编译器生成的签名
+
+`signature_of<T>()` / `signature_of(fn)` 可为支持的类型（不含裸 `jobject`，类在运行期才确定）、`reference_wrapper`、`void`，以及由上述类型构成的函数类型生成 JNI 签名。
+
+```cpp
+void native_test_impl(JNIEnv* env, jobject thiz, ...) {}
+
+static const JNINativeMethod gMethods[] = {
+    {"native_test", signature_of(native_test_impl).data(), native_test_impl},
+};
+
+#define DEFINE_METHOD(M) {#M, signature_of(M##_impl).data(), M##_impl}
+static const JNINativeMethod gMethods2[] = {
+    DEFINE_METHOD(native_test),
+};
 ```
 
+## 为什么 `JObject` 是模板？
 
-### 已知问题
+以便按 class tag 分别缓存各自的 `jclass` / method / field ID（各自静态存储）。
 
-- 如果返回类型与前 n 个参数类型是一样的，需要显示指定这些类型
+## 构建和测试
 
-### 为什么 JObject 是个模版?
-- 为了支持 jclass、jmethodID、jfieldID 缓存
+```sh
+cmake -S . -B build -DBUILD_TESTS=ON -DCMAKE_CXX_STANDARD=20
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
 
-#### 编译器
-需要 c++17 或更高。C++20 启用上文 NTTP API（`call<"name">`、`NamedClassTag` 等）。
+`ctest` 适用于本机构建；Android 交叉编译应在设备或模拟器上测试。
 
-- g++ >= 7.0(except 8.0~8.3)
+## 编译器
+
+需要 C++17 或更高。C++20 启用 `call<"name">`、`NamedClassTag` 等。
+
+- g++ >= 7.0（除 8.0–8.3）
 - clang >= 5.0
 - msvc >= 19.14
 - icc >= 18.0
 
-### TODO
+## TODO
+
 - modern C++ 类自动生成脚本
 
-#### MIT License
->Copyright (c) 2016-2021 WangBin
+## MIT License
+> Copyright (c) 2016-2026 WangBin

@@ -684,7 +684,7 @@ namespace detail {
 
     template<typename... Args>
     [[nodiscard]] auto make_jargs(JNIEnv* env, Args&&... args) {
-        return array<jvalue, sizeof...(Args)>{to_jvalue(std::forward<Args>(args), env)...};
+        return array<jvalue, sizeof...(Args)>{to_jvalue(std::forward<Args>(args), env)...}; // c++20 std::to_array
     }
 
 // from_jvalue/array() is called if parameter of call() is of type reference_wrapper<...>
@@ -723,6 +723,7 @@ namespace detail {
 
     template<typename T>
     inline constexpr bool has_local_ref_v = !is_arithmetic_v<T> && !is_enum_v<T> && !is_pointer_v<T> && !is_JObject_v<T>; // is_jobject<T>? is_jarray_cpp?
+
     template<typename T>
     void set_ref_from_jvalue(JNIEnv* env, jvalue* jargs, T, bool) {
         using Tn = remove_reference_t<T>;
