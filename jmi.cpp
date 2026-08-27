@@ -100,7 +100,7 @@ JNIEnv *getEnv(JNIEnv* env) {
     env = (JNIEnv*)pthread_getspecific(key_);
 #endif
     if (env)
-        clog << "JMI ERROR: TLS has a JNIEnv* but not attatched. Maybe detatched by user." << endl; // FIXME:
+        clog << "JMI ERROR: TLS has a JNIEnv* but not attached. Maybe detached by user." << endl;
     JavaVMAttachArgs aa{};
     aa.version = jni_ver;
     // 1st param of android: JNIEnv**, other platforms: void**
