@@ -787,7 +787,7 @@ namespace detail {
 
     template<typename T, typename... Args>
     T call_method_set_ref(JNIEnv *env, jobject oid, jmethodID mid, jvalue *jargs, Args&&... args) {
-        auto setter = call_on_exit([=]{
+        auto setter = call_on_exit([&]{
             // With a pending exception, only local-reference cleanup is safe; do not copy back output arguments.
             const auto copy_back = !env->ExceptionCheck();
             ref_args_from_jvalues(env, jargs, copy_back, args...);
@@ -822,7 +822,7 @@ namespace detail {
     }
     template<typename T, typename... Args>
     T call_static_method_set_ref(JNIEnv *env, jclass cid, jmethodID mid, jvalue *jargs, Args&&... args) {
-        auto setter = call_on_exit([=]{ // std::forward?
+        auto setter = call_on_exit([&]{
             // With a pending exception, only local-reference cleanup is safe; do not copy back output arguments.
             const auto copy_back = !env->ExceptionCheck();
             ref_args_from_jvalues(env, jargs, copy_back, args...);
