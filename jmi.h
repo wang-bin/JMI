@@ -6,10 +6,6 @@
  * MIT License
  */
 // requires: c++17
-// TODO: reset error before each call, reset exception after each call (Aspect pattern?)
-// TODO: query class path if return/parameter type is jobject
-// TODO: object convert
-// java template, e.g. Range<T>
 // https://developer.android.com/training/articles/perf-jni#threads
 //
 // Alternative ct_string design (not used): template<char... Cs> struct ct_string;
@@ -349,7 +345,7 @@ public:
 
     /*
         Field API
-       Field lifetime is bounded to JObject, it does not add object ref, when object is destroyed/reset, accessing Field will fail (TODO: how to avoid crash?)
+       A non-static Field does not own an extra object ref. Keep the parent JObject alive and unchanged while using it.
        jfieldID is cacheable if MayBeFTag is a FieldTag
        Usage:
         auto f = obj.field<int, MyFieldTag>(), obj.field<int>("MyField"), JObject<...>::staticField<string>("MySField");
@@ -674,7 +670,7 @@ namespace detail {
     jvalue to_jvalue(const C<T, A...> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
     template<typename T, size_t N> jvalue to_jvalue(const array<T, N> &c, JNIEnv* env) { return to_jvalue(to_jarray(env, c), env); }
 
-    template<typename T> jvalue to_jvalue(const reference_wrapper<T>& t, JNIEnv* env) { return to_jvalue(t.get(), env); } // TODO: no jvalue set
+    template<typename T> jvalue to_jvalue(const reference_wrapper<T>& t, JNIEnv* env) { return to_jvalue(t.get(), env); }
     template<template<typename,class...> class C, typename T, class... A, if_jarray_cpp<C<T, A...>>  = true> // if_jarray_cpp: exclude string, jarray works (copy chars)
     jvalue to_jvalue(const reference_wrapper<C<T, A...>>& c, JNIEnv* env) { return to_jvalue(to_jarray(env, c.get(), true), env); }
     template<typename T, size_t N> jvalue to_jvalue(const reference_wrapper<T[N]>& c, JNIEnv* env) { return to_jvalue(to_jarray<T,N>(env, c.get(), true), env); }
@@ -909,9 +905,8 @@ namespace detail {
     template<typename T>
     T get_field(jobject oid, jclass cid, const char* name) {
         JNIEnv* env = getEnv();
-        // TODO: call_on_exit?
         jfieldID fid = env->GetFieldID(cid, name, signature_of<T>().data());
-        if (!fid) // no exception check, already exist in get()? what about call?
+        if (!fid)
             return T();
         return get_field<T>(env, oid, fid);
     }
@@ -920,7 +915,6 @@ namespace detail {
     template<typename T>
     void set_field(jobject oid, jclass cid, const char* name, T&& v) {
         JNIEnv* env = getEnv();
-        // TODO: call_on_exit?
         jfieldID fid = env->GetFieldID(cid, name, signature_of<T>().data());
         if (!fid)
             return;
@@ -1011,7 +1005,6 @@ template<typename... Args>
 bool JObject<CTag>::create(Args&&... args) {
     using namespace std;
     using namespace detail;
-    // FIXME: why build error if let env be the last parameter of create()?
     JNIEnv* env = getEnv();
     if (!env) {
         setError("No JNIEnv when creating class '" + to_string(className()) + "'");
