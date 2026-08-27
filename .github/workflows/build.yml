@@ -86,8 +86,10 @@ jobs:
             os_ver: latest
     steps:
     - uses: actions/checkout@v5
-    - name: Install dev tools
-      run: sudo apt install openjdk-11-jdk-headless
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '11'
     - name: Build
       run: |
         cmake -DBUILD_TESTS=1 -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=gcc-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.cc_ver }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
@@ -112,8 +114,10 @@ jobs:
             os_ver: 22.04
     steps:
     - uses: actions/checkout@v5
-    - name: Install dev tools
-      run: sudo apt install openjdk-11-jdk-headless
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '11'
     - name: Build
       run: |
         cmake -DBUILD_TESTS=1 -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=clang-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=clang++-${{ matrix.cc_ver }}  -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
