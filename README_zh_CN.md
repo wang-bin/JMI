@@ -32,9 +32,9 @@ jmi::javaVM(vm);
 
 ### 缓存方法
 
-用方法名做模板参数（C++20 NTTP 或 `MethodTag`）的 `call<…>` / `callStatic<…>` 会缓存 `jmethodID`，只解析一次。热路径请优先使用。
+用方法名/字段名做模板参数（C++20 NTTP 或 `MethodTag`/`FieldTag`）的 `call<…>` / `callStatic<…>` / `field<…>` / `staticField<…>` 会缓存 ID，只解析一次。热路径请优先使用。
 
-**C++20** — `NamedClassTag`、`call<"name">`、`NamedMethodTag`、`NamedFieldTag`、`""_jmis`：
+**C++20** — `NamedClassTag`、`call<"name">`、`field<T, "name">`、`NamedMethodTag`、`NamedFieldTag`、`""_jmis`：
 
 ```cpp
 using SurfaceTexture = jmi::NamedClassTag<"android/graphics/SurfaceTexture">;
@@ -114,20 +114,25 @@ codec.dequeueOutputBuffer(bi, timeout); // bi 为 MediaCodec::BufferInfo&
 
 ## Field 接口
 
-`FieldTag` / C++20 `NamedFieldTag<"…">` 会在函数内静态缓存 ID。`obj.field<T>("name")` 和 `staticField<T>("name")` 在构造 `Field` 对象时查找 ID，并由该对象保存。直接调用 `obj.get<T>("name")` / `set()` / `getStatic()` / `setStatic()` 时，每次调用都会查找字段 ID。
+`FieldTag` / C++20 `field<T, "name">`（内部用 `NamedFieldTag`）会在函数内静态缓存 ID。`obj.field<T>("name")` 和 `staticField<T>("name")` 在构造 `Field` 对象时查找 ID，并由该对象保存。直接调用 `obj.get<T>("name")` / `set()` / `getStatic()` / `setStatic()` 时，每次调用都会查找字段 ID。
 
 ```cpp
-// C++20
-auto ifield = obj.field<jint, jmi::NamedFieldTag<"myIntFieldName">>();
+// C++20（与 call<T, "name"> 相同顺序：类型在前，字段名在后）
+auto ifield = obj.field<jint, "myIntFieldName">();
 jfieldID ifid = ifield; // 或 ifield.id()
 ifield.set(1234);
 jint ivalue = ifield; // 或 ifield.get()
 
-struct MyStrFieldS : jmi::FieldTag { static const char* name() { return "myStaticStrFieldName"; } };
-auto& sfield = JObject<MyClassTag>::staticField<std::string, MyStrFieldS>();
+auto& sfield = JObject<MyClassTag>::staticField<std::string, "myStaticStrFieldName">();
 sfield.set("JMI static field test");
 sfield = "assign";
 std::string s = sfield;
+
+// 等价于 field<jint, NamedFieldTag<"myIntFieldName">>()，一般不必手写 Tag
+auto ifield2 = obj.field<jint, jmi::NamedFieldTag<"myIntFieldName">>();
+
+struct MyStrFieldS : jmi::FieldTag { static const char* name() { return "myStaticStrFieldName"; } };
+auto& sfield2 = JObject<MyClassTag>::staticField<std::string, MyStrFieldS>();
 
 auto plain = obj.field<jint>("myIntFieldName"); // 为此 Field 对象查找一次
 ```
@@ -169,7 +174,7 @@ ctest --test-dir build --output-on-failure
 
 ## 编译器
 
-需要 C++17 或更高。C++20 启用 `call<"name">`、`NamedClassTag` 等。
+需要 C++17 或更高。C++20 启用 `call<"name">`、`field<T, "name">`、`NamedClassTag` 等。
 
 - g++ >= 7.0（除 8.0–8.3）
 - clang >= 5.0

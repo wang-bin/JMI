@@ -17,7 +17,7 @@
 //   Cons: mangled names explode on long JNI signatures; heavier compile/link; pack
 //         concat / substr are noisier than array-backed ct_string<N>; overlaps what
 //         C++20 already provides via template<ct_string Name> (value NTTP) and
-//         call<T, "name">() / NamedMethodTag<"name"> below.
+//         call<T, "name">() / field<T, "name">() / NamedMethodTag / NamedFieldTag below.
 #pragma once
 #include <array>
 #include <functional> // std::ref
@@ -35,7 +35,7 @@
 namespace jmi {
 using namespace std;
 /*************************** JMI Public APIs Begin ***************************/
-#define JMI_MAJOR 1
+#define JMI_MAJOR 2
 #define JMI_MINOR 0
 #define JMI_MICRO 0
 
@@ -79,6 +79,8 @@ struct ct_string : array<char, N> {
         return out;
     }
 };
+// CTAD: ct_string("literal") / ct_string{"literal"} -> ct_string<N>, N = sizeof array incl. '\0'.
+// Used in operator+ and signature_of(); public class names use JMISTR (GCC 10 CTAD bug, see below).
 template<size_t N>
 ct_string(char const (&)[N]) -> ct_string<N>;
 
@@ -397,6 +399,14 @@ public:
     [[nodiscard]] static auto staticField(const char* name)->Field<T, void, true> {
         return Field<T, void, true>(classId(), name);
     }
+#if (JMI_CXX20 + 0)
+    // C++20: cache jfieldID via ct_string NTTP (same order as call<T, "name">).
+    //   field<jint, "mState">();  staticField<string, "TAG">();
+    template<typename T, ct_string Name>
+    [[nodiscard]] auto field() const -> Field<T, NamedFieldTag<Name>, false>;
+    template<typename T, ct_string Name>
+    [[nodiscard]] static auto staticField() -> Field<T, NamedFieldTag<Name>, true>&;
+#endif
 private:
     static jclass classId(JNIEnv* env = nullptr);
     JObject& setError(const string& s) const noexcept {
@@ -1140,6 +1150,16 @@ template<class CTag>
 template<ct_string Name, typename... Args>
 void JObject<CTag>::callStatic(Args&&... args) {
     callStatic<NamedMethodTag<Name>>(std::forward<Args>(args)...);
+}
+template<class CTag>
+template<typename T, ct_string Name>
+auto JObject<CTag>::field() const -> Field<T, NamedFieldTag<Name>, false> {
+    return field<NamedFieldTag<Name>, T>();
+}
+template<class CTag>
+template<typename T, ct_string Name>
+auto JObject<CTag>::staticField() -> Field<T, NamedFieldTag<Name>, true>& {
+    return staticField<NamedFieldTag<Name>, T>();
 }
 #endif
 

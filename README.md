@@ -32,9 +32,9 @@ Call this before any JMI API, normally from `JNI_OnLoad`.
 
 ### Cached methods
 
-`call<…>` / `callStatic<…>` with a method name (C++20 NTTP or `MethodTag`) cache `jmethodID` and resolve it once. Prefer this on hot paths.
+`call<…>` / `callStatic<…>` / `field<…>` / `staticField<…>` with a method or field name (C++20 NTTP or `MethodTag` / `FieldTag`) cache IDs and resolve them once. Prefer this on hot paths.
 
-**C++20** — `NamedClassTag`, `call<"name">`, `NamedMethodTag`, `NamedFieldTag`, `""_jmis`:
+**C++20** — `NamedClassTag`, `call<"name">`, `field<T, "name">`, `NamedMethodTag`, `NamedFieldTag`, `""_jmis`:
 
 ```cpp
 using SurfaceTexture = jmi::NamedClassTag<"android/graphics/SurfaceTexture">;
@@ -114,20 +114,25 @@ codec.dequeueOutputBuffer(bi, timeout); // bi is MediaCodec::BufferInfo&
 
 ## Field API
 
-`FieldTag` / C++20 `NamedFieldTag<"…">` cache the ID in a function-local static. `obj.field<T>("name")` and `staticField<T>("name")` resolve the ID when the `Field` object is constructed and retain it in that object. The direct `obj.get<T>("name")` / `set()` / `getStatic()` / `setStatic()` overloads look up the field ID on each call.
+`FieldTag` / C++20 `field<T, "name">` (via `NamedFieldTag` internally) cache the ID in a function-local static. `obj.field<T>("name")` and `staticField<T>("name")` resolve the ID when the `Field` object is constructed and retain it in that object. The direct `obj.get<T>("name")` / `set()` / `getStatic()` / `setStatic()` overloads look up the field ID on each call.
 
 ```cpp
-// C++20
-auto ifield = obj.field<jint, jmi::NamedFieldTag<"myIntFieldName">>();
+// C++20 (same order as call<T, "name">: type first, field name second)
+auto ifield = obj.field<jint, "myIntFieldName">();
 jfieldID ifid = ifield; // or ifield.id()
 ifield.set(1234);
 jint ivalue = ifield; // or ifield.get()
 
-struct MyStrFieldS : jmi::FieldTag { static const char* name() { return "myStaticStrFieldName"; } };
-auto& sfield = JObject<MyClassTag>::staticField<std::string, MyStrFieldS>();
+auto& sfield = JObject<MyClassTag>::staticField<std::string, "myStaticStrFieldName">();
 sfield.set("JMI static field test");
 sfield = "assign";
 std::string s = sfield;
+
+// Same as field<jint, NamedFieldTag<"myIntFieldName">>(); Tag spelling is rarely needed
+auto ifield2 = obj.field<jint, jmi::NamedFieldTag<"myIntFieldName">>();
+
+struct MyStrFieldS : jmi::FieldTag { static const char* name() { return "myStaticStrFieldName"; } };
+auto& sfield2 = JObject<MyClassTag>::staticField<std::string, MyStrFieldS>();
 
 auto plain = obj.field<jint>("myIntFieldName"); // resolves once for this Field object
 ```
@@ -169,7 +174,7 @@ ctest --test-dir build --output-on-failure
 
 ## Compilers
 
-C++17 or later. C++20 enables `call<"name">`, `NamedClassTag`, etc.
+C++17 or later. C++20 enables `call<"name">`, `field<T, "name">`, `NamedClassTag`, etc.
 
 - g++ >= 7.0 (except 8.0–8.3)
 - clang >= 5.0
