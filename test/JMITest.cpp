@@ -46,6 +46,115 @@ void test_concurrent_method_first_access()
 		TEST(worker.get());
 }
 
+void test_thread_local_error()
+{
+	struct GetX : MethodTag { static const char* name() { return "getX"; } };
+	JObject<JMITestClassTag> obj;
+	TEST(obj.create());
+	atomic<int> ready{0};
+	atomic<bool> start{false};
+	auto failed = async(launch::async, [&] {
+		ready.fetch_add(1, memory_order_release);
+		while (!start.load(memory_order_acquire))
+			this_thread::yield();
+		const auto value = obj.call<jint>("missingMethod");
+		return value == 0 && !obj.error().empty();
+	});
+	auto succeeded = async(launch::async, [&] {
+		ready.fetch_add(1, memory_order_release);
+		while (!start.load(memory_order_acquire))
+			this_thread::yield();
+		const auto value = obj.call<jint, GetX>();
+		return value == 0 && obj.error().empty();
+	});
+	while (ready.load(memory_order_acquire) != 2)
+		this_thread::yield();
+	start.store(true, memory_order_release);
+	TEST(failed.get());
+	TEST(succeeded.get());
+	TEST(ClassTag::error().empty());
+
+	(void)JObject<JMITestClassTag>::callStatic<jint>("missingStaticMethod");
+	TEST(!obj.error().empty());
+	(void)JObject<JMITestClassTag>::callStatic<jfloat>("getY");
+	TEST(obj.error().empty());
+
+	auto missing = obj.field<jint>("missingField");
+	TEST(!obj.error().empty());
+	(void)missing.get();
+	TEST(!ClassTag::error().empty());
+	TEST(obj.set<jint>("missingField", 1));
+	TEST(!obj.error().empty());
+	TEST((obj.call<jint, GetX>() == 0));
+	TEST(obj.error().empty());
+}
+
+void test_error_reporting()
+{
+	// fail() path: context prefix is prepended when there is no pending JNI exception.
+	JObject<JMITestClassTag> empty;
+	(void)empty.call<jint>("getX");
+	TEST(ClassTag::error().find("Failed to call method 'getX'") != string::npos);
+	TEST(ClassTag::error().find("Invalid object instance") != string::npos);
+
+	JObject<JMITestClassTag> obj;
+	TEST(obj.create());
+	// Exception path: pending JNI exception uses the same context pieces.
+	(void)obj.call<jint>("noSuchMethod");
+	TEST(ClassTag::error().find("Failed to call method 'noSuchMethod'") != string::npos);
+	TEST(ClassTag::error().find("Exception") != string::npos);
+
+	// Returning a JObject goes through reset(); success must leave the thread error clear.
+	auto self = obj.call<JObject<JMITestClassTag>>("getSelf");
+	TEST(!!self);
+	TEST(ClassTag::error().empty());
+
+	struct MissingClassTag : ClassTag {
+		static constexpr auto name() { return JMISTR("jmi/test/DefinitelyMissingClass"); }
+	};
+	JObject<MissingClassTag> missing_class;
+	TEST(!missing_class.create());
+	TEST(ClassTag::error().find("Failed to create class") != string::npos);
+	TEST(ClassTag::error().find("DefinitelyMissingClass") != string::npos);
+
+	auto missing_field = obj.field<jint>("noSuchField");
+	TEST(!ClassTag::error().empty());
+	(void)missing_field.get();
+	TEST(ClassTag::error().find("Failed to access field") != string::npos);
+	TEST(ClassTag::error().find("Invalid field ID") != string::npos);
+
+	// Nested set_thread_error must survive an outer ErrorRecorder that neither sees an
+	// exception nor gets fail() — the case that wiped reset/NewGlobalRef failures before.
+	{
+		detail::ErrorRecorder checker(nullptr, "Outer call context.");
+		detail::set_thread_error("nested reset failure");
+	}
+	TEST(ClassTag::error() == "nested reset failure");
+
+	// fail() still wins over a nested error when there is no pending exception.
+	{
+		detail::ErrorRecorder checker(nullptr, "Failed to call method '", "m", "' with signature '", "()V", ".");
+		detail::set_thread_error("nested reset failure");
+		checker.fail("Invalid object instance");
+	}
+	TEST(ClassTag::error().find("Failed to call method 'm'") != string::npos);
+	TEST(ClassTag::error().find("Invalid object instance") != string::npos);
+	TEST(ClassTag::error().find("nested reset failure") == string::npos);
+
+	// Pending JNI exception wins over both nested error and fail().
+	{
+		JNIEnv* env = getEnv();
+		detail::ErrorRecorder checker(env, "Failed to call method '", "m", "' with signature '", "()V", ".");
+		detail::set_thread_error("nested reset failure");
+		checker.fail("should be ignored");
+		(void)env->FindClass("jmi/test/AnotherMissingClass");
+	}
+	TEST(ClassTag::error().find("Failed to call method 'm'") != string::npos);
+	TEST(ClassTag::error().find("Exception") != string::npos);
+	TEST(ClassTag::error().find("nested reset failure") == string::npos);
+	TEST(ClassTag::error().find("should be ignored") == string::npos);
+}
+
 void test_concurrent_static_field_first_access()
 {
 	struct Y : FieldTag { static const char* name() { return "y"; } };
@@ -506,6 +615,8 @@ void test()
 
 void run() {
 	test_concurrent_method_first_access();
+	test_thread_local_error();
+	test_error_reporting();
 	test_concurrent_static_field_first_access();
 	auto fut = async(launch::async, []{
 		test();

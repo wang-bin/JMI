@@ -12,6 +12,7 @@
 #include <vector>
 #include <thread>
 #include <tuple>
+#include <cstdlib>
 // Full thread local implementation: https://github.com/wang-bin/ThreadLocal or https://github.com/wang-bin/cppcompat/blob/master/include/cppcompat/thread_local.hpp
 #if defined(__MINGW32__)
 #elif (__clang__ + 0)
@@ -31,9 +32,51 @@
 #else
 # define STD_THREAD_LOCAL
 #endif
+#if !(USE_STD_THREAD_LOCAL + 0)
+#include <pthread.h>
+#endif
 
 using namespace std;
 namespace jmi {
+
+namespace {
+#if (USE_STD_THREAD_LOCAL + 0)
+string& thread_error() {
+    static STD_THREAD_LOCAL string error;
+    return error;
+}
+#else
+pthread_key_t error_key;
+once_flag error_key_once;
+
+void destroy_thread_error(void* value) {
+    delete static_cast<string*>(value);
+}
+
+string& thread_error() {
+    call_once(error_key_once, [] {
+        pthread_key_create(&error_key, destroy_thread_error);
+    });
+    auto* error = static_cast<string*>(pthread_getspecific(error_key));
+    if (!error) {
+        error = new string();
+        if (pthread_setspecific(error_key, error) != 0) {
+            delete error;
+            abort();
+        }
+    }
+    return *error;
+}
+#endif
+} // namespace
+
+const string& ClassTag::error() noexcept {
+    return thread_error();
+}
+
+void detail::set_thread_error(string s) {
+    thread_error() = std::move(s);
+}
 
 
 template<size_t N, class C, typename R, typename ...Args>

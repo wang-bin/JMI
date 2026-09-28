@@ -88,7 +88,7 @@ For cached methods and fields, JMI resolves the ID once on first use. Subsequent
 ## Threading and lifetime
 
 - `JNIEnv*`, local `jobject` references, and `LocalRef` are thread-local. Do not pass them to another thread; use a global reference such as a `JObject` instead.
-- `JObject` owns a global reference and can be copied, but one `JObject` instance is not a synchronized shared object. Use one wrapper instance per thread or synchronize access externally.
+- `JObject` owns a global reference and can be copied. Concurrent method and field calls may use the same wrapper while it is not reset, assigned, moved, or destroyed. The Java object itself must also support concurrent access.
 - A non-static `Field` does not own an additional object reference. Keep its parent `JObject` alive and unchanged while using the field.
 - JMI detaches native threads that it attached when they exit. Threads attached by the caller remain caller-managed.
 
@@ -104,7 +104,11 @@ codec.dequeueOutputBuffer(bi, timeout); // bi is MediaCodec::BufferInfo&
 
 ### Errors
 
-`JObject::call`, `get`, and `set` clear `error()` at the start of a call and set it if a JNI exception (or failure) is detected. The error belongs to that object instance and is overwritten by the next instance call, so check it promptly. `create()` also reports failure through its return value and `error()`.
+`ClassTag::error()` (also callable as `obj.error()`) returns the last fallible JMI operation's error for the calling thread. Instance and static method calls, field access, `Field` access, `create()`, and `reset()` update this slot; successful operations clear it. Check it on the same thread before making another JMI call. `Field` does not keep a separate error, and `JObject` copies do not copy error state.
+
+TODO: Consider returning `std::expected<T, JmiError>` from calls and field operations once the supported C++ baseline includes C++23, so each result carries its own error.
+
+The slot is shared by all JMI objects on one thread within one linked JMI instance. Threads have independent slots. If multiple dynamic libraries each statically link JMI, each library has its own slot.
 
 ### References
 

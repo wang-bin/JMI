@@ -88,7 +88,7 @@ auto t = texture.call<jlong>("getTimestamp");
 ## 线程与生命周期
 
 - `JNIEnv*`、local `jobject` 引用和 `LocalRef` 都属于创建它们的线程，不能传给其他线程；跨线程应使用 `JObject` 这样的 global ref。
-- `JObject` 持有 global ref，允许复制，但同一个 `JObject` 实例不是带同步的共享对象。建议每个线程使用自己的包装对象，或由外部同步访问。
+- `JObject` 持有 global ref，允许复制。只要没有并发执行 `reset()`、赋值、移动或析构，同一个包装实例可被多个线程同时用于方法和字段调用。Java 对象本身也必须支持并发访问。
 - 非静态 `Field` 不持有额外的对象引用。使用它时，所属的 `JObject` 必须保持有效且不能被 `reset()`。
 - JMI 会在线程退出时 detach 自己 attach 的 native 线程；由调用方 attach 的线程仍由调用方管理。
 
@@ -104,7 +104,11 @@ codec.dequeueOutputBuffer(bi, timeout); // bi 为 MediaCodec::BufferInfo&
 
 ### 错误
 
-`JObject::call`、`get` 和 `set` 在每次调用开始会清空 `error()`，若检测到 JNI 异常或失败再写入。错误属于该对象实例，并会被下一次实例调用覆盖，因此应及时检查。`create()` 也会通过返回值和 `error()` 报告失败。
+`ClassTag::error()`（也可写作 `obj.error()`）返回当前线程最近一次失败型 JMI 操作的错误。实例和静态方法、字段访问、`Field` 访问、`create()` 与 `reset()` 都会更新此槽；成功时清空。应在同一线程发起下一次 JMI 调用前检查。`Field` 不单独保存错误，复制 `JObject` 也不会复制错误状态。
+
+TODO：待项目支持的 C++ 基线包含 C++23 后，考虑让方法调用和字段操作返回 `std::expected<T, JmiError>`，使每个结果携带自己的错误。
+
+同一线程、同一份 JMI 链接实例中的所有 JMI 对象共用此槽；不同线程各自独立。如果多个动态库分别静态链接 JMI，每个动态库有自己的槽。
 
 ### 引用
 

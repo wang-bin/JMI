@@ -122,7 +122,11 @@ template<ct_string S>
 }
 #endif
 
-struct ClassTag {}; // used by JObject<Tag>. subclasses must define static constexpr auto name() {return JMISTR("someName");}, with or without "L ;" around someName
+struct ClassTag { // used by JObject<Tag>. subclasses must define static constexpr auto name() {return JMISTR("someName");}, with or without "L ;" around someName
+    // The last fallible JMI operation's error on the calling thread.
+    // TODO: Consider std::expected results for calls once the supported C++ baseline includes C++23.
+    [[nodiscard]] static const string& error() noexcept;
+};
 struct MethodTag {}; // used by call() and callStatic(). subclasses must define static const char* name() or static constexpr const char*();
 struct FieldTag {}; // subclasses must define static const char* name() or static constexpr const char*();
 
@@ -253,28 +257,30 @@ public:
     }
     JObject(LocalRef&& ref) : JObject((jobject)ref, false) {}
     JObject(const LocalRef& ref) = delete; // required
-    JObject(const JObject &other) { reset(other.id()).setError(other.error()); }
+    JObject(const JObject &other) { reset(other.id()); }
     JObject &operator=(const JObject &other) {
         if (this == &other)
             return *this;
-        return reset(other.id()).setError(other.error());
+        return reset(other.id());
     }
     JObject(JObject &&other) { // default implementation does not reset other.oid_
         swap(oid_, other.oid_);
-        swap(error_, other.error_);
     }
     JObject &operator=(JObject &&other) { // default implementation does not reset other.oid_
         swap(oid_, other.oid_);
-        swap(error_, other.error_);
         return *this;
     }
-    ~JObject() { reset(); }
+    ~JObject() {
+        if (oid_) {
+            if (auto env = getEnv())
+                env->DeleteGlobalRef(oid_);
+        }
+    }
 
     operator jobject() const { return oid_;}
     operator jclass() const { return classId();}
     jobject id() const { return oid_; }
     explicit operator bool() const { return !!oid_;}
-    const string& error() const {return error_;}
     JObject& reset(jobject obj = nullptr, JNIEnv *env = nullptr);
 
     template<typename... Args>
@@ -409,17 +415,8 @@ public:
 #endif
 private:
     static jclass classId(JNIEnv* env = nullptr);
-    JObject& setError(const string& s) const noexcept {
-        error_ = s;
-        return *const_cast<JObject*>(this);
-    }
-    JObject& setError(string&& s) const noexcept {
-        error_ = std::move(s);
-        return *const_cast<JObject*>(this);
-    }
 
     jobject oid_ = nullptr;
-    mutable string error_;
 };
 
 template<class CTag>
@@ -604,6 +601,7 @@ namespace detail {
     std::string handle_exception(JNIEnv* env = nullptr,
         const char* p0 = nullptr, const char* p1 = nullptr, const char* p2 = nullptr,
         const char* p3 = nullptr, const char* p4 = nullptr) noexcept;
+    void set_thread_error(string s);
 
     template<class F>
     class scope_exit_handler {
@@ -625,6 +623,41 @@ namespace detail {
     auto call_on_exit(F&& f) noexcept {
         return scope_exit_handler{std::forward<F>(f)};
     }
+
+    class ErrorRecorder {
+    public:
+        ErrorRecorder(JNIEnv* env, const char* p0 = nullptr, const char* p1 = nullptr,
+                      const char* p2 = nullptr, const char* p3 = nullptr, const char* p4 = nullptr)
+            : env_(env), p0_(p0), p1_(p1), p2_(p2), p3_(p3), p4_(p4) {
+            set_thread_error(string());
+        }
+        ~ErrorRecorder() {
+            // Prefer a pending JNI exception, then fail(), else keep an error set by a nested
+            // operation (e.g. reset/NewGlobalRef) so the outer recorder does not clear it.
+            auto error = env_ ? handle_exception(env_, p0_, p1_, p2_, p3_, p4_) : string();
+            if (error.empty() && !failure_.empty()) {
+                string ctx;
+                for (auto* p : {p0_, p1_, p2_, p3_, p4_}) {
+                    if (p && *p)
+                        ctx += p;
+                }
+                error = ctx.empty() ? std::move(failure_) : std::move(ctx) + " " + std::move(failure_);
+            }
+            if (error.empty() && !ClassTag::error().empty())
+                return;
+            set_thread_error(std::move(error));
+        }
+        void fail(string error) { failure_ = std::move(error); }
+        void setEnv(JNIEnv* env) { env_ = env; }
+    private:
+        JNIEnv* env_;
+        const char* p0_;
+        const char* p1_;
+        const char* p2_;
+        const char* p3_;
+        const char* p4_;
+        string failure_;
+    };
 
     template<typename T, if_not_JObject<T> = true>
     jarray make_jarray(JNIEnv *env, const T &element, size_t size); // element is for getting jobject class
@@ -843,45 +876,30 @@ namespace detail {
         return call_static_method<T>(env, cid, mid, jargs);
     }
 
-    // std::function would heap-allocate the per-call lambda; nullptr is a no-op.
-    template<typename F>
-    void invoke_err_cb(F&& f, string&& s) {
-        if constexpr (!is_null_pointer_v<decay_t<F>>)
-            invoke(std::forward<F>(f), std::move(s));
-    }
-
-    template<typename T, typename ErrCb, typename... Args>
-    T call_with_methodID(jobject oid, jclass cid, jmethodID mid, ErrCb&& err_cb, const char* signature, const char* name, Args&&... args) {
-        invoke_err_cb(err_cb, string());
+    template<typename T, typename... Args>
+    T call_with_methodID(jobject oid, jclass cid, jmethodID mid, const char* signature, const char* name, Args&&... args) {
+        ErrorRecorder checker(nullptr, "Failed to call method '", name, "' with signature '", signature, ".");
         if (!cid)
             return T();
         if (!oid) {
-            invoke_err_cb(err_cb, string("Invalid object instance"));
+            checker.fail("Invalid object instance");
             return T();
         }
-        JNIEnv *env = getEnv();
-        const auto checker = call_on_exit([=, err_cb = std::forward<ErrCb>(err_cb)]{
-            auto ex = handle_exception(env, "Failed to call method '", name, "' with signature '", signature, ".");
-            if (!ex.empty())
-                invoke_err_cb(err_cb, std::move(ex));
-        });
+        JNIEnv* env = getEnv();
+        checker.setEnv(env);
         if (!mid || env->ExceptionCheck())
             return T();
         auto jargs = make_jargs(env, std::forward<Args>(args)...);
         return call_method_set_ref<T>(env, oid, mid, jargs.empty() ? nullptr : jargs.data(), std::forward<Args>(args)...);
     }
 
-    template<typename T, typename ErrCb, typename... Args>
-    T call_static_with_methodID(jclass cid, jmethodID mid, ErrCb&& err_cb, const char* signature, const char* name, Args&&... args) {
-        invoke_err_cb(err_cb, string());
+    template<typename T, typename... Args>
+    T call_static_with_methodID(jclass cid, jmethodID mid, const char* signature, const char* name, Args&&... args) {
+        ErrorRecorder checker(nullptr, "Failed to call static method '", name, "' with signature '", signature, ".");
         if (!cid)
             return T();
         JNIEnv *env = getEnv();
-        auto checker = call_on_exit([=, err_cb = std::forward<ErrCb>(err_cb)]{
-            auto ex = handle_exception(env, "Failed to call static method '", name, "' with signature '", signature, ".");
-            if (!ex.empty())
-                invoke_err_cb(err_cb, std::move(ex));
-        });
+        checker.setEnv(env);
         if (!mid || env->ExceptionCheck())
             return T();
         auto jargs = make_jargs(env, std::forward<Args>(args)...);
@@ -993,20 +1011,31 @@ constexpr auto JObject<CTag>::signature()
 
 template<class CTag>
 JObject<CTag>& JObject<CTag>::reset(jobject obj, JNIEnv *env) {
-    if (oid_ == obj) // same handle, including both null
+    if (oid_ == obj) { // same handle, including both null
+        detail::set_thread_error(string());
         return *this;
-    if (!(env = getEnv(env)))
-        return setError("Invalid JNIEnv");
+    }
+    if (!(env = getEnv(env))) {
+        detail::set_thread_error("Invalid JNIEnv");
+        return *this;
+    }
     // Local and global refs to the same Java object have different handle values.
-    if (oid_ && obj && env->IsSameObject(oid_, obj))
+    if (oid_ && obj && env->IsSameObject(oid_, obj)) {
+        detail::set_thread_error(string());
         return *this;
-    error_.clear();
+    }
     env->DeleteGlobalRef(oid_); // can be null
     oid_ = nullptr;
     if (obj) {
         oid_ = env->NewGlobalRef(obj);
         //env->DeleteLocalRef(obj); // obj from JObject has no local ref
+        if (!oid_) {
+            auto error = detail::handle_exception(env, "Failed to create global reference.");
+            detail::set_thread_error(error.empty() ? string("Failed to create global reference.") : std::move(error));
+            return *this;
+        }
     }
+    detail::set_thread_error(string());
     return *this;
 }
 
@@ -1015,21 +1044,22 @@ template<typename... Args>
 bool JObject<CTag>::create(Args&&... args) {
     using namespace std;
     using namespace detail;
+    constexpr auto class_name = className();
     JNIEnv* env = getEnv();
+    ErrorRecorder checker(env, "Failed to create class '", class_name.data(), "'.");
     if (!env) {
-        setError("No JNIEnv when creating class '" + to_string(className()) + "'");
+        checker.fail("No JNIEnv when creating class");
         return false;
     }
     const jclass cid = classId(env);
     if (!cid) {
-        setError("Failed to find class '" + to_string(className()) + "'");
+        checker.fail("Failed to find class");
         return false;
     }
-    const auto checker = call_on_exit([=]{ handle_exception(env); });
     static constexpr auto s = args_signature<Args...>() + signature_of(); // void
     static const jmethodID mid = env->GetMethodID(cid, "<init>", s.data()); // can be static because class id, signature and arguments combination is unique
     if (!mid) {
-        setError(string("Failed to find constructor of '") + className().data() + "' with signature '" + s.data() + "'.");
+        checker.fail(string("Failed to find constructor of '") + className().data() + "' with signature '" + s.data() + "'.");
         return false;
     }
     auto jargs = make_jargs(env, std::forward<Args>(args)...);
@@ -1041,10 +1071,12 @@ bool JObject<CTag>::create(Args&&... args) {
         return false;
     LocalRef oid = env->NewObjectA(cid, mid, args_ptr);
     if (!oid) {
-        setError(string("Failed to call constructor '") + className().data() + "' with signature '" + s.data() + "'.");
+        checker.fail(string("Failed to call constructor '") + className().data() + "' with signature '" + s.data() + "'.");
         return false;
     }
     reset(oid, env);
+    if (!oid_)
+        checker.fail(string("Failed to create global reference for '") + className().data() + "'.");
     return !!oid_;
 }
 
@@ -1097,7 +1129,7 @@ T JObject<CTag>::call(Args&&... args) const {
     static const jmethodID mid = [] {
         return getEnv()->GetMethodID(classId(), MTag::name(), s.data());
     }();
-    return call_with_methodID<T>(oid_, classId(), mid, [this](string&& err){ setError(std::move(err));}, s.data(), MTag::name(), std::forward<Args>(args)...);
+    return call_with_methodID<T>(oid_, classId(), mid, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<class MTag, typename... Args, detail::if_MethodTag<MTag>>
@@ -1107,7 +1139,7 @@ void JObject<CTag>::call(Args&&... args) const {
     static const jmethodID mid = [] {
         return getEnv()->GetMethodID(classId(), MTag::name(), s.data());
     }();
-    call_with_methodID<void>(oid_, classId(), mid, [this](string&& err){ setError(std::move(err));}, s.data(), MTag::name(), std::forward<Args>(args)...);
+    call_with_methodID<void>(oid_, classId(), mid, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename T, class MTag, typename... Args,  detail::if_MethodTag<MTag>>
@@ -1117,7 +1149,7 @@ T JObject<CTag>::callStatic(Args&&... args) {
     static const jmethodID mid = [] {
         return getEnv()->GetStaticMethodID(classId(), MTag::name(), s.data());
     }();
-    return call_static_with_methodID<T>(classId(), mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
+    return call_static_with_methodID<T>(classId(), mid, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 template<class CTag>
 template<class MTag, typename... Args,  detail::if_MethodTag<MTag>>
@@ -1127,7 +1159,7 @@ void JObject<CTag>::callStatic(Args&&... args) {
     static const jmethodID mid = [] {
         return getEnv()->GetStaticMethodID(classId(), MTag::name(), s.data());
     }();
-    call_static_with_methodID<void>(classId(), mid, nullptr, s.data(), MTag::name(), std::forward<Args>(args)...);
+    call_static_with_methodID<void>(classId(), mid, s.data(), MTag::name(), std::forward<Args>(args)...);
 }
 
 #if (JMI_CXX20 + 0)
@@ -1166,42 +1198,47 @@ auto JObject<CTag>::staticField() -> Field<T, NamedFieldTag<Name>, true>& {
 template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
 T JObject<CTag>::get() const {
-    auto checker = detail::call_on_exit([this]{
-        // TODO: check fid
-        setError(detail::handle_exception(nullptr, "Failed to get field '", FTag::name(), "' with signature '", signature_of<T>().data(), "."));
-    });
+    static constexpr auto sig = signature_of<T>();
+    JNIEnv* env = getEnv();
+    detail::ErrorRecorder checker(env, "Failed to get field '", FTag::name(), "' with signature '", sig.data(), ".");
     static const jfieldID fid = [] {
         return getEnv()->GetFieldID(classId(), FTag::name(), signature_of<T>().data());
     }();
-    return detail::get_field<T>(getEnv(), oid_, fid);
+    return detail::get_field<T>(env, oid_, fid);
 }
 template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
 bool JObject<CTag>::set(T&& v) {
-    auto checker = detail::call_on_exit([this]{
-        setError(detail::handle_exception(nullptr, "Failed to set field '", FTag::name(), "' with signature '", signature_of<T>().data(), "."));
-    });
+    static constexpr auto sig = signature_of<T>();
+    JNIEnv* env = getEnv();
+    detail::ErrorRecorder checker(env, "Failed to set field '", FTag::name(), "' with signature '", sig.data(), ".");
     static const jfieldID fid = [] {
         return getEnv()->GetFieldID(classId(), FTag::name(), signature_of<T>().data());
     }();
-    detail::set_field<T>(getEnv(), oid_, fid, std::forward<T>(v));
+    detail::set_field<T>(env, oid_, fid, std::forward<T>(v));
     return true;
 }
 template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
 T JObject<CTag>::getStatic() {
+    static constexpr auto sig = signature_of<T>();
+    JNIEnv* env = getEnv();
+    detail::ErrorRecorder checker(env, "Failed to get static field '", FTag::name(), "' with signature '", sig.data(), ".");
     static const jfieldID fid = [] {
         return getEnv()->GetStaticFieldID(classId(), FTag::name(), signature_of<T>().data());
     }();
-    return detail::get_static_field<T>(getEnv(), classId(), fid);
+    return detail::get_static_field<T>(env, classId(), fid);
 }
 template<class CTag>
 template<class FTag, typename T, detail::if_FieldTag<FTag>>
 bool JObject<CTag>::setStatic(T&& v) {
+    static constexpr auto sig = signature_of<T>();
+    JNIEnv* env = getEnv();
+    detail::ErrorRecorder checker(env, "Failed to set static field '", FTag::name(), "' with signature '", sig.data(), ".");
     static const jfieldID fid = [] {
         return getEnv()->GetStaticFieldID(classId(), FTag::name(), signature_of<T>().data());
     }();
-    detail::set_static_field<T>(getEnv(), classId(), fid, std::forward<T>(v));
+    detail::set_static_field<T>(env, classId(), fid, std::forward<T>(v));
     return true;
 }
 
@@ -1213,7 +1250,7 @@ T JObject<CTag>::call(const char* methodName, Args&&... args) const {
     static constexpr auto s = args_signature<Args...>() + signature_of_no_ptr<add_pointer_t<T>>();
     const jclass cid = classId();
     const jmethodID mid = cid && oid_ ? getEnv()->GetMethodID(cid, methodName, s.data()) : nullptr;
-    return call_with_methodID<T>(oid_, cid, mid, [this](string&& err){ setError(std::move(err));}, s.data(), methodName, std::forward<Args>(args)...);
+    return call_with_methodID<T>(oid_, cid, mid, s.data(), methodName, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename... Args>
@@ -1222,7 +1259,7 @@ void JObject<CTag>::call(const char* methodName, Args&&... args) const {
     static constexpr auto s = args_signature<Args...>() + signature_of();
     const jclass cid = classId();
     const jmethodID mid = cid && oid_ ? getEnv()->GetMethodID(cid, methodName, s.data()) : nullptr;
-    call_with_methodID<void>(oid_, cid, mid, [this](string&& err){ setError(std::move(err));}, s.data(), methodName, std::forward<Args>(args)...);
+    call_with_methodID<void>(oid_, cid, mid, s.data(), methodName, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename T, typename... Args, detail::if_not_MethodTag<T>>
@@ -1231,7 +1268,7 @@ T JObject<CTag>::callStatic(const char* name, Args&&... args) {
     static constexpr auto s = args_signature<Args...>() + signature_of_no_ptr<add_pointer_t<T>>();
     const jclass cid = classId();
     const jmethodID mid = cid ? getEnv()->GetStaticMethodID(cid, name, s.data()) : nullptr;
-    return call_static_with_methodID<T>(cid, mid, nullptr, s.data(), name, std::forward<Args>(args)...);
+    return call_static_with_methodID<T>(cid, mid, s.data(), name, std::forward<Args>(args)...);
 }
 template<class CTag>
 template<typename... Args>
@@ -1240,35 +1277,36 @@ void JObject<CTag>::callStatic(const char* name, Args&&... args) {
     static constexpr auto s = args_signature<Args...>() + signature_of();
     const jclass cid = classId();
     const jmethodID mid = cid ? getEnv()->GetStaticMethodID(cid, name, s.data()) : nullptr;
-    call_static_with_methodID<void>(cid, mid, nullptr, s.data(), name, std::forward<Args>(args)...);
+    call_static_with_methodID<void>(cid, mid, s.data(), name, std::forward<Args>(args)...);
 }
 
 template<class CTag>
 template<typename T>
 T JObject<CTag>::get(const char* fieldName) const {
-    auto checker = detail::call_on_exit([fieldName, this]{
-        // TODO: check fid
-        setError(detail::handle_exception(nullptr, "Failed to get field '", fieldName, "' with signature '", signature_of<T>().data(), "."));
-    });
+    static constexpr auto sig = signature_of<T>();
+    detail::ErrorRecorder checker(getEnv(), "Failed to get field '", fieldName, "' with signature '", sig.data(), ".");
     return detail::get_field<T>(oid_, classId(), fieldName);
 }
 template<class CTag>
 template<typename T>
 bool JObject<CTag>::set(const char* fieldName, T&& v) {
-    auto checker = detail::call_on_exit([fieldName, this]{
-        setError(detail::handle_exception(nullptr, "Failed to set field '", fieldName, "' with signature '", signature_of<T>().data(), "."));
-    });
+    static constexpr auto sig = signature_of<T>();
+    detail::ErrorRecorder checker(getEnv(), "Failed to set field '", fieldName, "' with signature '", sig.data(), ".");
     detail::set_field<T>(oid_, classId(), fieldName, std::forward<T>(v));
     return true;
 }
 template<class CTag>
 template<typename T>
 T JObject<CTag>::getStatic(const char* fieldName) {
+    static constexpr auto sig = signature_of<T>();
+    detail::ErrorRecorder checker(getEnv(), "Failed to get static field '", fieldName, "' with signature '", sig.data(), ".");
     return detail::get_static_field<T>(classId(), fieldName);
 }
 template<class CTag>
 template<typename T>
 bool JObject<CTag>::setStatic(const char* fieldName, T&& v) {
+    static constexpr auto sig = signature_of<T>();
+    detail::ErrorRecorder checker(getEnv(), "Failed to set static field '", fieldName, "' with signature '", sig.data(), ".");
     detail::set_static_field<T>(classId(), fieldName, std::forward<T>(v));
     return true;
 }
@@ -1277,26 +1315,32 @@ template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
 F JObject<CTag>::Field<F, MayBeFTag, isStaticField>::get() const
 {
-    auto checker = detail::call_on_exit([]{
-        detail::handle_exception();
-    });
+    JNIEnv* env = getEnv();
+    detail::ErrorRecorder checker(env, "Failed to access field.");
+    if (!fid_) {
+        checker.fail("Invalid field ID");
+        return F();
+    }
     if constexpr (isStaticField)
-        return detail::get_static_field<F>(getEnv(), cid_, id());
+        return detail::get_static_field<F>(env, cid_, id());
     else
-        return detail::get_field<F>(getEnv(), oid_, id());
+        return detail::get_field<F>(env, oid_, id());
 }
 
 template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
 void JObject<CTag>::Field<F, MayBeFTag, isStaticField>::set(F&& v)
 {
-    auto checker = detail::call_on_exit([]{
-        detail::handle_exception();
-    });
+    JNIEnv* env = getEnv();
+    detail::ErrorRecorder checker(env, "Failed to access field.");
+    if (!fid_) {
+        checker.fail("Invalid field ID");
+        return;
+    }
     if constexpr (isStaticField)
-        detail::set_static_field<F>(getEnv(), cid_, id(), std::forward<F>(v));
+        detail::set_static_field<F>(env, cid_, id(), std::forward<F>(v));
     else
-        detail::set_field<F>(getEnv(), oid_, id(), std::forward<F>(v));
+        detail::set_field<F>(env, oid_, id(), std::forward<F>(v));
 }
 
 template<class CTag>
@@ -1316,15 +1360,19 @@ template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
 JObject<CTag>::Field<F, MayBeFTag, isStaticField>::Field(jclass cid, jobject oid)
  : oid_(oid) {
-    fid_ = cachedId(cid);
+    static constexpr auto sig = signature_of<F>();
+    detail::ErrorRecorder checker(getEnv(), "Failed to find field ID '", MayBeFTag::name(), "' with signature '", sig.data(), ".");
     if constexpr (isStaticField)
         cid_ = cid;
+    fid_ = cachedId(cid);
 }
 
 template<class CTag>
 template<typename F, class MayBeFTag, bool isStaticField>
 JObject<CTag>::Field<F, MayBeFTag, isStaticField>::Field(jclass cid, const char* name, jobject oid)
  : oid_(oid) {
+    static constexpr auto sig = signature_of<F>();
+    detail::ErrorRecorder checker(getEnv(), "Failed to find field '", name, "' with signature '", sig.data(), ".");
     if constexpr (isStaticField) {
         fid_ = getEnv()->GetStaticFieldID(cid, name, signature_of<F>().data());
         cid_ = cid;
