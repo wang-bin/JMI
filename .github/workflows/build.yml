@@ -52,23 +52,15 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v5
-    - name: Install dev tools
-      run: |
-        brew install openjdk
-        brew info openjdk
+    - name: Select Java 17
+      run: echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
     - name: Build
-      #env:
-      #  JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
       run: |
-        export JAVA_HOME=/usr/local/opt/openjdk
         cmake -DBUILD_TESTS=1 -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
         cmake --build .
     - name: Test
-      #env:
-      #  JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
       run: |
         ls -l lib* *.jar
-        export JAVA_HOME=/usr/local/opt/openjdk
         ctest -V
 
   GCC:
@@ -86,8 +78,8 @@ jobs:
             os_ver: latest
     steps:
     - uses: actions/checkout@v5
-    - name: Install dev tools
-      run: sudo apt install openjdk-11-jdk-headless
+    - name: Select Java 17
+      run: echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
     - name: Build
       run: |
         cmake -DBUILD_TESTS=1 -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=gcc-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.cc_ver }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
@@ -112,8 +104,8 @@ jobs:
             os_ver: 22.04
     steps:
     - uses: actions/checkout@v5
-    - name: Install dev tools
-      run: sudo apt install openjdk-11-jdk-headless
+    - name: Select Java 17
+      run: echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
     - name: Build
       run: |
         cmake -DBUILD_TESTS=1 -DCMAKE_CXX_STANDARD=${{ matrix.std }} -DCMAKE_C_COMPILER=clang-${{ matrix.cc_ver }} -DCMAKE_CXX_COMPILER=clang++-${{ matrix.cc_ver }}  -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
